@@ -1,5 +1,5 @@
 /* 나의 숲 — Service Worker */
-const VERSION = 'grove-v1.0.0';
+const VERSION = 'grove-v1.0.1';
 const SHELL = [
   './',
   './index.html',
