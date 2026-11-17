@@ -788,7 +788,25 @@ function renderSettings() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   const permText = perm === 'granted' ? 'allowed' : perm === 'denied' ? 'blocked — allow it in browser settings' : perm === 'unsupported' ? 'not supported in this browser' : 'not yet allowed';
   return `
-    <div class="page-head"><div class="page-icon">⚙️</div><div class="grow"><h1 class="page-title">Settings</h1><div class="page-sub">Notifications · Install · Backup</div></div></div>
+    <div class="page-head"><div class="page-icon">⚙️</div><div class="grow"><h1 class="page-title">Settings</h1><div class="page-sub">Lock · Notifications · Install · Backup</div></div></div>
+
+    <div class="section-title">🔒 App lock</div>
+    <div class="card">
+      <div class="set-row">
+        <div class="s-text"><div class="s-title">Require a PIN</div><div class="s-desc">${lockOn() ? `On · ${S.settings.lock.len}-digit PIN` : 'Ask for a PIN every time Grove opens'}</div></div>
+        <button class="switch${lockOn() ? ' on' : ''}" data-act="toggle-lock" aria-label="App lock"></button>
+      </div>
+      ${lockOn() ? `
+      <div class="set-row wrap">
+        <div class="s-text"><div class="s-title">Lock after leaving</div><div class="s-desc">When you come back after this long</div></div>
+        <div class="seg" id="lockAfter">${LOCK_AFTER.map((o) => `<button data-act="lock-after" data-v="${o.v}" class="${(S.settings.lock.after ?? 1) === o.v ? 'on' : ''}">${o.l}</button>`).join('')}</div>
+      </div>
+      <div class="set-row">
+        <div class="s-text"><div class="s-title">Change PIN</div></div>
+        <button class="btn btn-ghost btn-sm" data-act="change-pin">Change</button>
+      </div>` : ''}
+    </div>
+    <div class="note">🔒 The lock keeps others from opening Grove on your phone. It's a privacy screen, not encryption — keep regular backups, and note a forgotten PIN can only be reset by erasing this device's Grove data.</div>
 
     <div class="section-title">🔔 Notifications</div>
     <div class="card">
@@ -1437,6 +1455,9 @@ const actions = {
     S.settings.notify = true; save(); render(); registerPeriodic();
     toast('Routine reminders on 🔔');
   },
+  'toggle-lock': () => pinModal(lockOn() ? 'off' : 'set'),
+  'change-pin': () => pinModal('change'),
+  'lock-after': (el) => { S.settings.lock.after = +el.dataset.v; save(); render(); },
   'toggle-remind': () => { S.settings.remind = !S.settings.remind; save(); render(); },
   'test-notify': async () => {
     if (!('Notification' in window)) return toast('This browser doesn\'t support notifications');
@@ -1531,6 +1552,116 @@ function toast(msg) {
   clearTimeout(toastTm); toastTm = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+/* ───────── App lock (PIN) ───────── */
+const LOCK_AFTER = [{ v: 0, l: 'Immediately' }, { v: 1, l: '1 min' }, { v: 5, l: '5 min' }, { v: 30, l: '30 min' }];
+async function pinHash(pin, salt) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${pin}`));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const lockOn = () => !!S.settings.lock?.hash;
+let lockState = { pin: '', fails: 0, until: 0, open: false };
+function showLock() {
+  if (!lockOn()) return;
+  lockState = { ...lockState, pin: '', open: true };
+  document.body.classList.add('locked');
+  const len = S.settings.lock.len || 4;
+  let el = $('#lock');
+  if (!el) { el = document.createElement('div'); el.id = 'lock'; document.body.appendChild(el); }
+  el.innerHTML = `
+    <div class="lock-inner">
+      <div class="brand-mark lock-mark">${svgLeaf}</div>
+      <div class="lock-title">Grove</div>
+      <div class="lock-sub" id="lockMsg">Enter your PIN</div>
+      <div class="lock-dots" id="lockDots">${Array.from({ length: len }, () => '<i></i>').join('')}</div>
+      <div class="lock-pad">
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-k="${n}">${n}</button>`).join('')}
+        <button class="ghost" data-k="forgot">Forgot?</button><button data-k="0">0</button><button class="ghost" data-k="del" aria-label="Delete">⌫</button>
+      </div>
+    </div>`;
+  el.onclick = (e) => { const b = e.target.closest('button'); if (b) lockKey(b.dataset.k); };
+}
+function lockDots(err) {
+  const d = $('#lockDots'); if (!d) return;
+  $$('i', d).forEach((i, n) => i.classList.toggle('on', n < lockState.pin.length));
+  if (err) { d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); }
+}
+async function lockKey(k) {
+  if (!lockState.open) return;
+  const msg = $('#lockMsg');
+  if (k === 'forgot') return lockForgot();
+  if (Date.now() < lockState.until) { msg.textContent = `Too many tries — wait ${Math.ceil((lockState.until - Date.now()) / 1000)}s`; return; }
+  if (k === 'del') { lockState.pin = lockState.pin.slice(0, -1); return lockDots(); }
+  const len = S.settings.lock.len || 4;
+  if (lockState.pin.length >= len) return;
+  lockState.pin += k; lockDots();
+  if (lockState.pin.length < len) return;
+  const ok = (await pinHash(lockState.pin, S.settings.lock.salt)) === S.settings.lock.hash;
+  if (ok) { lockState.fails = 0; unlock(); return; }
+  lockState.fails++; lockState.pin = '';
+  if (lockState.fails >= 5) { lockState.until = Date.now() + 30000; lockState.fails = 0; msg.textContent = 'Too many tries — wait 30s'; }
+  else msg.textContent = 'Wrong PIN — try again';
+  if (navigator.vibrate) try { navigator.vibrate([30, 40, 30]); } catch (_) {}
+  lockDots(true);
+}
+function unlock() {
+  lockState.open = false;
+  const el = $('#lock'); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 250); }
+  document.body.classList.remove('locked');
+}
+async function lockForgot() {
+  lockState.open = false;
+  const ok = await ask('Forgot your PIN?', 'The PIN can\'t be recovered. The only way back in is to erase all Grove data on this device and start fresh. If you exported a backup, you can restore it afterwards.', 'Erase & reset', true);
+  lockState.open = true;
+  if (!ok) return;
+  try { localStorage.removeItem(KEY); } catch (_) {}
+  try { await imgOp('readwrite', (st) => st.clear()); } catch (_) {}
+  S = seed(); save(true); unlock(); go('#today'); toast('Grove was reset');
+}
+document.addEventListener('keydown', (e) => {
+  if (!lockState.open || $('#modal').classList.contains('open')) return;
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); lockKey(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); lockKey('del'); }
+}, true);
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (!lockOn()) return;
+  if (document.hidden) { hiddenAt = Date.now(); if ((S.settings.lock.after ?? 1) === 0) showLock(); }
+  else if (!lockState.open && hiddenAt && Date.now() - hiddenAt >= (S.settings.lock.after ?? 1) * 60000) showLock();
+});
+
+/* PIN setup / change / off */
+function pinModal(mode) {
+  // mode: 'set' | 'change' | 'off'
+  const needOld = mode !== 'set';
+  const needNew = mode !== 'off';
+  openModal(`
+    <h3>${mode === 'set' ? 'Set a PIN' : mode === 'change' ? 'Change PIN' : 'Turn off app lock'}</h3>
+    <p class="desc">${mode === 'off' ? 'Enter your current PIN to turn the lock off.' : 'Use 4–6 digits. Grove will ask for it whenever you open the app.'}</p>
+    ${needOld ? '<div class="field"><label>Current PIN</label><input class="input pin-in" id="pinOld" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" /></div>' : ''}
+    ${needNew ? `<div class="field"><label>New PIN</label><input class="input pin-in" id="pinNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" /></div>
+    <div class="field"><label>Confirm new PIN</label><input class="input pin-in" id="pinNew2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" /></div>` : ''}
+    <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button>
+    <button class="btn ${mode === 'off' ? 'btn-danger' : 'btn-primary'}" id="pinSave">${mode === 'off' ? 'Turn off' : 'Save PIN'}</button></div>`);
+  $$('.pin-in').forEach((i) => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 6); }));
+  $('#pinSave').addEventListener('click', async () => {
+    if (needOld) {
+      const old = $('#pinOld').value;
+      if ((await pinHash(old, S.settings.lock.salt)) !== S.settings.lock.hash) { $('#pinOld').value = ''; $('#pinOld').focus(); return toast('Current PIN is wrong'); }
+    }
+    if (needNew) {
+      const a = $('#pinNew').value, b = $('#pinNew2').value;
+      if (a.length < 4) { $('#pinNew').focus(); return toast('Use at least 4 digits'); }
+      if (a !== b) { $('#pinNew2').value = ''; $('#pinNew2').focus(); return toast('PINs don\'t match'); }
+      const salt = uid() + uid();
+      S.settings.lock = { hash: await pinHash(a, salt), salt, len: a.length, after: S.settings.lock?.after ?? 1 };
+      save(); closeModal(); render(); toast(mode === 'set' ? 'App lock on 🔒' : 'PIN changed');
+        } else {
+      S.settings.lock = null; save(); closeModal(); render(); toast('App lock off');
+    }
+  });
+  setTimeout(() => ($('#pinOld') || $('#pinNew'))?.focus(), 50);
+}
+
 /* ───────── notifications ───────── */
 async function notify(title, body, tag) {
   try {
@@ -1618,6 +1749,7 @@ setInterval(heartbeat, 20000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { heartbeat(); if (!$('#sheet').classList.contains('open') && !$('#modal').classList.contains('open')) render(); } });
 
 /* boot */
+if (lockOn()) showLock();
 if (location.hash === '#new-memo') { render(); quickNewMemo(); }
 else { view = parseHash(); render(); }
 save(true);
