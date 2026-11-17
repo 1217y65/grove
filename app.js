@@ -220,6 +220,7 @@ function render() {
     if (grp) title = `${grp.icon} ${grp.name}`;
     main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : renderRoutineSection(sec);
   }
+  hydrateImgs(main);
   $('#topbarTitle').textContent = title;
   document.title = title === 'Grove' ? 'Grove' : `${title} · Grove`;
   if (view.name === 'search') { const i = $('#searchInput'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
@@ -329,7 +330,7 @@ function renderToday() {
       const pool = S.inspos.filter((x) => secs.has(x.sectionId) && x.text);
       if (!pool.length) return '';
       const seedN = [...dkey()].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
-      return `<div class="section-title">✨ Inspiration</div>${inspoCard(pool[seedN % pool.length], true)}`;
+      return `<div class="section-title">✨ Inspiration</div>${quoteCard(pool[seedN % pool.length], true)}`;
     })()}
     <div>
     </div>
@@ -484,23 +485,94 @@ function renderPlanSection(sec) {
 }
 
 /* ── Inspiration ── */
-const stars = (n, size = 13) => n ? `<span class="stars" style="font-size:${size}px">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>` : '';
-function inspoCard(x, wide) {
-  const k = KINDS[x.kind] || KINDS.other;
-  if (x.kind === 'quote' || (!x.title && x.text)) {
-    return `<button class="card inspo quote${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
-      <div class="q-text">${esc(x.text || x.title)}</div>
-      <div class="q-by">${x.who ? `— ${esc(x.who)}` : ''}${x.title && x.text ? `${x.who ? ', ' : '— '}<i>${esc(x.title)}</i>` : ''}</div>
-      ${x.kind !== 'quote' ? `<div class="i-kind">${k.icon} ${k.label}</div>` : ''}
-    </button>`;
+/* images live in their own IndexedDB so localStorage stays small */
+const IMG = { db: null, urls: new Map() };
+function imgDB() {
+  return IMG.db ||= new Promise((res, rej) => {
+    const r = indexedDB.open('grove-img', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('img');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function imgOp(mode, fn) {
+  const db = await imgDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('img', mode); const req = fn(tx.objectStore('img'));
+    tx.oncomplete = () => res(req?.result); tx.onerror = () => rej(tx.error);
+  });
+}
+const imgPut = (id, blob) => imgOp('readwrite', (st) => st.put(blob, id));
+const imgGet = (id) => imgOp('readonly', (st) => st.get(id));
+const imgDel = (id) => { if (!id) return; const u = IMG.urls.get(id); if (u) URL.revokeObjectURL(u); IMG.urls.delete(id); return imgOp('readwrite', (st) => st.delete(id)).catch(() => {}); };
+async function imgURL(id) {
+  if (IMG.urls.has(id)) return IMG.urls.get(id);
+  const b = await imgGet(id).catch(() => null);
+  if (!b) return '';
+  const u = URL.createObjectURL(b); IMG.urls.set(id, u); return u;
+}
+function hydrateImgs(root = document) {
+  $$('img[data-img]', root).forEach(async (el) => {
+    const u = await imgURL(el.dataset.img);
+    if (u) { el.src = u; el.closest('.poster')?.classList.add('has-img'); }
+  });
+}
+async function shrinkImage(file, max = 900) {
+  let img = await createImageBitmap(file).catch(() => null);
+  if (!img) img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const sc = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('encode'))), 'image/jpeg', 0.85));
+}
+const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+
+/* YouTube */
+function ytId(url) {
+  const m = String(url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/))([\w-]{11})/);
+  return m ? m[1] : '';
+}
+const ytThumb = (id) => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+async function ytMeta(url) {
+  const tries = [`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`, `https://noembed.com/embed?url=${encodeURIComponent(url)}`];
+  for (const u of tries) {
+    try { const r = await fetch(u); if (!r.ok) continue; const j = await r.json(); if (j.title) return { title: j.title, author: (j.author_name || '').replace(/ - Topic$/, '') }; } catch (_) {}
   }
-  return `<button class="card inspo${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
-    <div class="i-kind">${k.icon} ${k.label}${x.date ? ` · ${dueLabel(x.date).replace(/ · D-\d+$/, '')}` : ''}</div>
-    <div class="i-title">${esc(x.title || 'Untitled')}</div>
-    ${x.who ? `<div class="i-who">${esc(x.who)}</div>` : ''}
-    ${stars(x.rating)}
-    ${x.text ? `<div class="i-line">“${esc(x.text)}”</div>` : x.note ? `<div class="i-note">${esc(x.note)}</div>` : ''}
+  return null;
+}
+
+const stars = (n, size = 13) => n ? `<span class="stars" style="font-size:${size}px">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>` : '';
+function posterHTML(x, extra = '') {
+  const k = KINDS[x.kind] || KINDS.other;
+  const src = x.img ? `<img data-img="${x.img}" alt="" />` : x.yt ? `<img src="${ytThumb(x.yt)}" alt="" loading="lazy" onerror="this.remove()" />` : '';
+  return `<div class="poster k-${x.kind}${x.yt && !x.img ? ' has-img' : ''} ${extra}">
+    <div class="poster-ph"><span>${k.icon}</span><b>${esc(x.title || k.label)}</b></div>${src}
+    ${x.yt ? '<span class="yt-badge">▶</span>' : ''}</div>`;
+}
+function posterCard(x) {
+  const sub = [x.who, x.date ? x.date.slice(0, 4) : ''].filter(Boolean).join(' · ');
+  return `<button class="pcard k-${x.kind}" data-act="open-inspo" data-id="${x.id}">
+    ${posterHTML(x)}
+    <div class="pc-title">${esc(x.title || 'Untitled')}</div>
+    ${sub ? `<div class="pc-sub">${esc(sub)}</div>` : ''}
+    ${x.rating ? `<div class="pc-rate">★ ${x.rating}.0</div>` : ''}
+    ${x.note ? `<div class="pc-note">${esc(x.note)}</div>` : ''}
   </button>`;
+}
+function quoteCard(x, wide) {
+  const k = KINDS[x.kind] || KINDS.other;
+  return `<button class="card inspo quote${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
+    <div class="q-text">${esc(x.text || x.title)}</div>
+    <div class="q-by">${x.who ? `— ${esc(x.who)}` : ''}${x.title && x.text ? `${x.who ? ', ' : '— '}${esc(x.title)}` : ''}</div>
+    ${x.note ? `<div class="q-note">${esc(x.note)}</div>` : ''}
+    ${x.kind !== 'quote' ? `<div class="i-kind">${k.icon} ${k.label}</div>` : ''}
+  </button>`;
+}
+function inspoBlock(xs, headers) {
+  const qs = xs.filter((x) => x.kind === 'quote');
+  const ps = xs.filter((x) => x.kind !== 'quote');
+  const both = headers && qs.length && ps.length;
+  return `${ps.length ? `${both ? '<div class="section-title">🎞️ Collection</div>' : ''}<div class="poster-grid">${ps.map(posterCard).join('')}</div>` : ''}
+    ${qs.length ? `${both ? '<div class="section-title">💬 Quotes</div>' : ''}<div class="quote-list">${qs.map((x) => quoteCard(x)).join('')}</div>` : ''}`;
 }
 function renderInspoSection(sec) {
   const all = S.inspos.filter((x) => x.sectionId === sec.id).sort((a, b) => b.created - a.created);
@@ -510,10 +582,10 @@ function renderInspoSection(sec) {
     ${sectionHead(sec, `${all.length} saved · films, books, quotes & more`)}
     <div class="tabs">
       <button class="tab${kind ? '' : ' on'}" data-act="inspo-kind" data-k="">All <span>${all.length}</span></button>
-      ${Object.entries(KINDS).map(([k, v]) => `<button class="tab${kind === k ? ' on' : ''}" data-act="inspo-kind" data-k="${k}">${v.icon} ${v.label}${all.filter((x) => x.kind === k).length ? ` <span>${all.filter((x) => x.kind === k).length}</span>` : ''}</button>`).join('')}
+      ${Object.entries(KINDS).map(([k, v]) => { const n = all.filter((x) => x.kind === k).length; return `<button class="tab${kind === k ? ' on' : ''}" data-act="inspo-kind" data-k="${k}">${v.icon} ${v.label}${n ? ` <span>${n}</span>` : ''}</button>`; }).join('')}
     </div>
-    ${xs.length ? `<div class="inspo-grid">${xs.map((x) => inspoCard(x)).join('')}</div>`
-      : `<div class="empty"><div class="e-icon">${kind ? KINDS[kind].icon : '✨'}</div>${kind ? `No ${KINDS[kind].label.toLowerCase()}s yet` : 'Save the films, books and words that move you'}</div>`}
+    ${xs.length ? inspoBlock(xs, true)
+      : `<div class="empty"><div class="e-icon">${kind ? KINDS[kind].icon : '✨'}</div>${kind ? `No ${KINDS[kind].label.toLowerCase()}s yet` : 'Save the films, books, songs and words that move you'}</div>`}
     <button class="fab" data-act="new-inspo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>Add</button>`;
 }
 
@@ -554,7 +626,7 @@ function searchResults(q) {
       </button>`).join('')}</div>` : ''}
     ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
     ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}
-    ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div><div class="inspo-grid">${xs.map((x) => inspoCard(x)).join('')}</div>` : ''}`;
+    ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div>${inspoBlock(xs)}` : ''}`;
 }
 
 /* ── Settings ── */
@@ -781,29 +853,73 @@ function openPlan(id) {
 function openInspo(id) {
   const x = S.inspos.find((i) => i.id === id);
   if (!x) return;
+  const upd = () => { x.updated = Date.now(); save(true); };
+  const grow = (el) => { if (!el) return; el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, window.innerHeight * 0.42) + 'px'; };
   const draw = () => {
     const k = KINDS[x.kind];
     const isQ = x.kind === 'quote';
+    const isM = x.kind === 'music';
+    const hasPic = x.img || x.yt;
     $('#inspoForm').innerHTML = `
       <div class="seg kind-seg" id="iKind">${Object.entries(KINDS).map(([kk, v]) => `<button data-v="${kk}" class="${x.kind === kk ? 'on' : ''}">${v.icon} ${v.label}</button>`).join('')}</div>
-      ${isQ ? `<textarea class="quote-input" id="iText" rows="3" placeholder="Write the quote…">${esc(x.text)}</textarea>`
-        : `<input class="title-input" id="iTitle" placeholder="${k.label} title" value="${esc(x.title)}" />`}
-      <div class="grid-2" style="gap:0 14px;margin-top:10px">
-        <div class="field"><label>${k.who}</label><input class="input" id="iWho" value="${esc(x.who)}" placeholder="${isQ ? 'e.g. Maya Angelou' : k.who}" /></div>
-        ${isQ ? `<div class="field"><label>Source (optional)</label><input class="input" id="iTitle" value="${esc(x.title)}" placeholder="Book, film, speech…" /></div>`
-          : `<div class="field"><label>Date</label><input type="date" class="input" id="iDate" value="${x.date || ''}" /></div>`}
-      </div>
-      ${isQ ? '' : `<div class="field"><span class="field-label">Rating</span><div class="star-pick" id="iRate">${[1, 2, 3, 4, 5].map((n) => `<button data-v="${n}" class="${n <= x.rating ? 'on' : ''}" aria-label="${n} stars">★</button>`).join('')}</div></div>
-      <div class="field"><label>Favorite line (optional)</label><textarea class="textarea" id="iText" style="min-height:70px" placeholder="A line that stayed with you">${esc(x.text)}</textarea></div>`}
-      <div class="field"><label>Thoughts</label><textarea class="textarea" id="iNote" placeholder="Why it matters to you…">${esc(x.note)}</textarea></div>`;
-    const upd = () => { x.updated = Date.now(); save(true); };
+      ${isQ ? `
+        <textarea class="quote-input" id="iText" rows="2" placeholder="Write the quote…">${esc(x.text)}</textarea>
+        <div class="i-row">
+          <input class="i-sub-in" id="iWho" value="${esc(x.who)}" placeholder="Said by" />
+          <input class="i-sub-in" id="iTitle" value="${esc(x.title)}" placeholder="Source — book, film, speech…" />
+        </div>` : `
+        <div class="i-hero">
+          <label class="poster-up" for="iFile">
+            ${posterHTML(x, hasPic ? '' : 'empty-up')}
+            <span class="poster-edit">${hasPic ? 'Change' : `＋ ${x.kind === 'book' ? 'Cover' : isM ? 'Cover' : 'Poster'}`}</span>
+            <input type="file" id="iFile" accept="image/*" hidden />
+          </label>
+          <div class="i-meta">
+            <input class="i-title-in" id="iTitle" placeholder="${k.label} title" value="${esc(x.title)}" />
+            <input class="i-sub-in" id="iWho" value="${esc(x.who)}" placeholder="${k.who}" />
+            <input class="i-sub-in" type="date" id="iDate" value="${x.date || ''}" />
+            <div class="star-pick" id="iRate">${[1, 2, 3, 4, 5].map((n) => `<button data-v="${n}" class="${n <= x.rating ? 'on' : ''}" aria-label="${n} stars">★</button>`).join('')}</div>
+            ${x.img ? '<button class="link-btn" id="iImgDel">Remove image</button>' : ''}
+          </div>
+        </div>
+        ${isM ? `<div class="field yt-field"><label>YouTube link</label><input class="input" id="iUrl" inputmode="url" placeholder="Paste a YouTube or YouTube Music link" value="${esc(x.url || '')}" /></div>` : ''}
+        ${x.yt ? `<div class="yt-embed"><iframe src="https://www.youtube-nocookie.com/embed/${x.yt}?rel=0&playsinline=1" title="YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>` : ''}`}
+      <label class="thought-label" for="iNote">Thoughts</label>
+      <textarea class="thought-input" id="iNote" placeholder="${isQ ? 'Why does this stay with you?' : 'What did it leave you with?'}">${esc(x.note)}</textarea>
+      ${isQ ? '' : `<div class="field" style="margin-top:18px"><label>Favorite line (optional)</label><textarea class="textarea" id="iText" style="min-height:70px" placeholder="A line that stayed with you">${esc(x.text)}</textarea></div>`}`;
+    hydrateImgs($('#inspoForm'));
+    grow($('#iNote'));
     $('#iKind').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; x.kind = b.dataset.v; upd(); draw(); });
     $('#iTitle')?.addEventListener('input', (e) => { x.title = e.target.value; upd(); });
     $('#iText')?.addEventListener('input', (e) => { x.text = e.target.value; upd(); });
-    $('#iWho').addEventListener('input', (e) => { x.who = e.target.value; upd(); });
-    $('#iNote').addEventListener('input', (e) => { x.note = e.target.value; upd(); });
+    $('#iWho')?.addEventListener('input', (e) => { x.who = e.target.value; upd(); });
+    $('#iNote').addEventListener('input', (e) => { x.note = e.target.value; grow(e.target); upd(); });
     $('#iDate')?.addEventListener('change', (e) => { x.date = e.target.value; upd(); });
     $('#iRate')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const v = +b.dataset.v; x.rating = x.rating === v ? 0 : v; upd(); $$('#iRate button').forEach((y) => y.classList.toggle('on', +y.dataset.v <= x.rating)); });
+    $('#iFile')?.addEventListener('change', async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        const blob = await shrinkImage(f);
+        const nid = 'img-' + uid(); await imgPut(nid, blob);
+        if (x.img) imgDel(x.img);
+        x.img = nid; upd(); draw();
+      } catch (_) { toast('Couldn\'t load that image'); }
+    });
+    $('#iImgDel')?.addEventListener('click', (e) => { e.preventDefault(); imgDel(x.img); x.img = ''; upd(); draw(); });
+    $('#iUrl')?.addEventListener('input', async (e) => {
+      const url = e.target.value.trim(); const vid = ytId(url);
+      x.url = url;
+      if (vid === (x.yt || '')) { upd(); return; }
+      x.yt = vid; upd(); draw();
+      if (vid && (!x.title || !x.who)) {
+        const meta = await ytMeta(url);
+        if (meta && x.yt === vid) {
+          if (!x.title) x.title = meta.title;
+          if (!x.who) x.who = meta.author;
+          upd(); draw(); toast('Linked from YouTube 🎵');
+        }
+      }
+    });
   };
   openSheet(`
     <div class="sheet-bar">
@@ -813,10 +929,13 @@ function openInspo(id) {
     </div>
     <div class="sheet-body"><div class="sheet-inner" id="inspoForm"></div></div>`, {
     type: 'inspo', id,
-    onClose: () => { if (!x.title.trim() && !x.text.trim() && !x.note.trim() && !x.who.trim()) S.inspos = S.inspos.filter((i) => i.id !== id); save(true); },
+    onClose: () => {
+      if (![x.title, x.text, x.note, x.who, x.url].some((v) => (v || '').trim()) && !x.img) { S.inspos = S.inspos.filter((i) => i.id !== id); }
+      save(true);
+    },
   });
   draw();
-  if (!x.title && !x.text) setTimeout(() => ($('#iText') || $('#iTitle'))?.focus(), 280);
+  if (!x.title && !x.text && !x.note) setTimeout(() => (x.kind === 'quote' ? $('#iText') : x.kind === 'music' ? $('#iUrl') : $('#iTitle'))?.focus(), 280);
 }
 
 /* ───────── Modals ───────── */
@@ -1023,6 +1142,7 @@ const actions = {
     S.memos = S.memos.filter((m) => m.sectionId !== sec.id);
     S.plans = S.plans.filter((p) => p.sectionId !== sec.id);
     S.routines = S.routines.filter((r) => r.sectionId !== sec.id);
+    S.inspos.filter((x) => x.sectionId === sec.id && x.img).forEach((x) => imgDel(x.img));
     S.inspos = S.inspos.filter((x) => x.sectionId !== sec.id);
     save(); toast('Section deleted'); go('#today');
   },
@@ -1046,13 +1166,14 @@ const actions = {
   'open-plan': (el) => openPlan(el.dataset.id),
   'inspo-kind': (el) => { view.kind = el.dataset.k; render(); },
   'new-inspo': (el) => {
-    const x = { id: uid(), sectionId: el.dataset.sec, kind: view.kind || 'quote', title: '', who: '', text: '', note: '', rating: 0, date: dkey(), created: Date.now(), updated: Date.now() };
+    const x = { id: uid(), sectionId: el.dataset.sec, kind: view.kind || 'film', title: '', who: '', text: '', note: '', url: '', yt: '', img: '', rating: 0, date: dkey(), created: Date.now(), updated: Date.now() };
     S.inspos.push(x); save(true); openInspo(x.id);
   },
   'open-inspo': (el) => openInspo(el.dataset.id),
   'del-inspo': async () => {
     const id = sheetCtx.id;
     if (!(await ask('Delete this item?', 'This can\'t be undone.', 'Delete', true))) return;
+    const it = S.inspos.find((x) => x.id === id); if (it?.img) imgDel(it.img);
     S.inspos = S.inspos.filter((x) => x.id !== id); save(true); closeSheet(); toast('Deleted');
   },
   'toggle-plan': (el) => {
@@ -1104,8 +1225,10 @@ const actions = {
     render();
   },
   install: async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); },
-  export: () => {
-    const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
+  export: async () => {
+    const images = {};
+    for (const x of S.inspos) if (x.img) { const b = await imgGet(x.img).catch(() => null); if (b) images[x.img] = await blobToDataURL(b); }
+    const blob = new Blob([JSON.stringify({ ...S, images }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `grove-backup-${dkey()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
@@ -1114,6 +1237,7 @@ const actions = {
   },
   reset: async () => {
     if (!(await ask('Erase everything?', 'All memos, plans, routines and check-ins will be deleted.', 'Erase all', true))) return;
+    imgOp('readwrite', (st) => st.clear()).catch(() => {}); IMG.urls.clear();
     S = seed(); save(); toast('Reset complete'); go('#today');
   },
 };
@@ -1143,7 +1267,7 @@ document.addEventListener('submit', (e) => {
   }
 });
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'searchInput') { view.q = e.target.value; $('#searchResults').innerHTML = searchResults(view.q); }
+  if (e.target.id === 'searchInput') { view.q = e.target.value; $('#searchResults').innerHTML = searchResults(view.q); hydrateImgs($('#searchResults')); }
   if (e.target.id === 'memoFilter') {
     view.mq = e.target.value;
     const sec = S.sections.find((s) => s.id === view.id);
@@ -1162,6 +1286,8 @@ document.addEventListener('change', async (e) => {
       const data = JSON.parse(await file.text());
       if (!Array.isArray(data.sections)) throw new Error('bad');
       if (!(await ask('Restore this backup?', `${data.sections.length} sections, ${(data.memos || []).length} memos, ${(data.plans || []).length} plans and ${(data.routines || []).length} routines will replace your current data.`, 'Restore'))) return;
+      const images = data.images || {}; delete data.images;
+      for (const [iid, url] of Object.entries(images)) { try { await imgPut(iid, await (await fetch(url)).blob()); } catch (_) {} }
       S = normalize(data); save(); toast('Backup restored'); go('#today');
     } catch (_) { toast('That doesn\'t look like a Grove backup'); }
     e.target.value = '';
