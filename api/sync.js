@@ -27,7 +27,7 @@ export async function GET(request) {
   try {
     const res = await get(path, { access: 'private', useCache: false });
     if (!res || res.statusCode !== 200) return json({ error: 'not-found' }, 404);
-    return new Response(res.stream, { status: 200, headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-grove-etag': res.blob.etag } });
+    return new Response(res.stream, { status: 200, headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-grove-etag': String(res.blob.etag || '').replace(/^W\//, '') } });
   } catch (e) {
     if (e?.name === 'BlobNotFoundError' || /not.?found/i.test(String(e?.message))) return json({ error: 'not-found' }, 404);
     return json({ error: 'read-failed' }, 500);
@@ -41,7 +41,9 @@ export async function PUT(request) {
   if (!path) return json({ error: 'bad-request' }, 400);
   const body = await request.arrayBuffer();
   if (!body.byteLength || body.byteLength > MAX) return json({ error: 'too-large' }, 413);
-  const ifMatch = request.headers.get('if-match') || undefined;
+  // Blob reads can hand back a weak ETag (W/"…") — compare on the bare value
+  const rawMatch = request.headers.get('if-match');
+  const ifMatch = rawMatch ? `"${rawMatch.replace(/^W\//, '').replace(/"/g, '')}"` : undefined;
   try {
     const r = await put(path, Buffer.from(body), {
       access: 'private', addRandomSuffix: false, allowOverwrite: true,
@@ -50,7 +52,7 @@ export async function PUT(request) {
     });
     return json({ ok: true, etag: r.etag });
   } catch (e) {
-    if (e?.name === 'BlobPreconditionFailedError') return json({ error: 'conflict' }, 412);
+    if (e?.name === 'BlobPreconditionFailedError' || /precondition|etag mismatch/i.test(String(e?.message))) return json({ error: 'conflict' }, 412);
     return json({ error: 'write-failed', detail: String(e?.message || e).slice(0, 200) }, 500);
   }
 }
