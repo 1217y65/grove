@@ -42,6 +42,7 @@ const svgCheck = '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12
 const svgBack = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const svgTrash = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const svgPin = (on) => `<svg viewBox="0 0 24 24" width="19" height="19"><path d="M9 3h6l-1 6 4 4H6l4-4-1-6zM12 13v8" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+const svgClose = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 const svgMore = '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>';
 const svgLeaf = '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 21v-8" stroke="#1C3528" stroke-width="2" stroke-linecap="round"/><path d="M12 13c0-4 2.5-7 7-7 0 4.5-3 7-7 7z" fill="#1C3528"/><path d="M12 15c0-3.3-2.2-5.5-6-5.5 0 3.5 2.4 5.5 6 5.5z" fill="#3F7454"/></svg>';
 
@@ -850,18 +851,20 @@ function openPlan(id) {
   if (!p.title) setTimeout(() => $('#pTitle').focus(), 280);
 }
 
-function openInspo(id) {
-  const x = S.inspos.find((i) => i.id === id);
+const inspoHas = (x) => [x.title, x.text, x.note, x.who, x.url].some((v) => (v || '').trim()) || !!x.img;
+function openInspo(id, draft) {
+  const x = draft || S.inspos.find((i) => i.id === id);
   if (!x) return;
+  const isNew = !!draft;
   const upd = () => { x.updated = Date.now(); save(true); };
   const grow = (el) => { if (!el) return; el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, window.innerHeight * 0.42) + 'px'; };
   const draw = () => {
+    if (!$('#inspoForm') || sheetCtx?.item !== x) return;
     const k = KINDS[x.kind];
     const isQ = x.kind === 'quote';
     const isM = x.kind === 'music';
     const hasPic = x.img || x.yt;
     $('#inspoForm').innerHTML = `
-      <div class="seg kind-seg" id="iKind">${Object.entries(KINDS).map(([kk, v]) => `<button data-v="${kk}" class="${x.kind === kk ? 'on' : ''}">${v.icon} ${v.label}</button>`).join('')}</div>
       ${isQ ? `
         <textarea class="quote-input" id="iText" rows="2" placeholder="Write the quote…">${esc(x.text)}</textarea>
         <div class="i-row">
@@ -889,7 +892,6 @@ function openInspo(id) {
       ${isQ ? '' : `<div class="field" style="margin-top:18px"><label>Favorite line (optional)</label><textarea class="textarea" id="iText" style="min-height:70px" placeholder="A line that stayed with you">${esc(x.text)}</textarea></div>`}`;
     hydrateImgs($('#inspoForm'));
     grow($('#iNote'));
-    $('#iKind').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; x.kind = b.dataset.v; upd(); draw(); });
     $('#iTitle')?.addEventListener('input', (e) => { x.title = e.target.value; upd(); });
     $('#iText')?.addEventListener('input', (e) => { x.text = e.target.value; upd(); });
     $('#iWho')?.addEventListener('input', (e) => { x.who = e.target.value; upd(); });
@@ -921,16 +923,20 @@ function openInspo(id) {
       }
     });
   };
+  const kk = KINDS[x.kind] || KINDS.other;
   openSheet(`
     <div class="sheet-bar">
-      <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
-      <div class="crumb">${secName(x.sectionId)}</div>
-      <button class="icon-btn" data-act="del-inspo" aria-label="Delete">${svgTrash}</button>
+      <button class="icon-btn" data-act="inspo-cancel" aria-label="${isNew ? 'Cancel' : 'Back'}">${isNew ? svgClose : svgBack}</button>
+      <div class="crumb crumb-strong">${kk.icon} ${isNew ? `New ${kk.label.toLowerCase()}` : kk.label}</div>
+      ${isNew ? '' : `<button class="icon-btn" data-act="del-inspo" aria-label="Delete">${svgTrash}</button>`}
+      <button class="done-btn" data-act="inspo-done" aria-label="Save">${svgCheck}</button>
     </div>
     <div class="sheet-body"><div class="sheet-inner" id="inspoForm"></div></div>`, {
-    type: 'inspo', id,
-    onClose: () => {
-      if (![x.title, x.text, x.note, x.who, x.url].some((v) => (v || '').trim()) && !x.img) { S.inspos = S.inspos.filter((i) => i.id !== id); }
+    type: 'inspo', id: x.id, isNew, item: x,
+    onClose() {
+      // back gestures / Escape keep what was written; only the ✕ button discards a new draft
+      if (isNew) { if (inspoHas(x) && !this.discard) S.inspos.push(x); else if (x.img) imgDel(x.img); }
+      else if (!inspoHas(x)) S.inspos = S.inspos.filter((i) => i.id !== x.id);
       save(true);
     },
   });
@@ -1166,8 +1172,27 @@ const actions = {
   'open-plan': (el) => openPlan(el.dataset.id),
   'inspo-kind': (el) => { view.kind = el.dataset.k; render(); },
   'new-inspo': (el) => {
-    const x = { id: uid(), sectionId: el.dataset.sec, kind: view.kind || 'film', title: '', who: '', text: '', note: '', url: '', yt: '', img: '', rating: 0, date: dkey(), created: Date.now(), updated: Date.now() };
-    S.inspos.push(x); save(true); openInspo(x.id);
+    const secId = el.dataset.sec;
+    const start = (kind) => openInspo(null, { id: uid(), sectionId: secId, kind, title: '', who: '', text: '', note: '', url: '', yt: '', img: '', rating: 0, date: dkey(), created: Date.now(), updated: Date.now() });
+    if (view.kind && KINDS[view.kind]) return start(view.kind);
+    openModal(`<h3>What are you adding?</h3><p class="desc">Pick a type to start writing</p>
+      <div class="kind-pick">${Object.entries(KINDS).map(([k, v]) => `<button data-k="${k}"><span>${v.icon}</span>${v.label}</button>`).join('')}</div>
+      <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button></div>`);
+    $('.kind-pick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; closeModal(); start(b.dataset.k); });
+  },
+  'inspo-done': () => {
+    const { item, isNew } = sheetCtx;
+    const has = inspoHas(item);
+    closeSheet();
+    if (has) toast(isNew ? `Added to ${(KINDS[item.kind] || KINDS.other).label} ✓` : 'Saved ✓');
+  },
+  'inspo-cancel': async () => {
+    const ctx = sheetCtx;
+    if (ctx.isNew && inspoHas(ctx.item)) {
+      if (!(await ask('Discard this entry?', 'What you wrote won\'t be saved.', 'Discard', true))) return;
+      ctx.discard = true;
+    }
+    closeSheet();
   },
   'open-inspo': (el) => openInspo(el.dataset.id),
   'del-inspo': async () => {
