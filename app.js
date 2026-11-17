@@ -25,6 +25,7 @@ const TYPES = {
   plan: { icon: '🎯', label: 'Plan', desc: 'Tasks · Goals' },
   routine: { icon: '🌱', label: 'Routine', desc: 'Daily habits' },
   inspo: { icon: '✨', label: 'Inspiration', desc: 'Films · Books · Quotes' },
+  faith: { icon: '🙏', label: 'Faith', desc: 'QT · Prayer · Verses' },
 };
 const KINDS = {
   film: { icon: '🎬', label: 'Film', who: 'Director', title: 'Title' },
@@ -57,10 +58,12 @@ function seed() {
   const plan = s('Plan', '🎯', 'plan');
   const routine = s('Routine', '🌱', 'routine');
   const inspo = s('Inspiration', '✨', 'inspo');
+  const faith = s('Faith', '🙏', 'faith');
   const now = Date.now();
   return {
-    v: 3,
-    sections: [memo, plan, routine, inspo],
+    v: 4,
+    sections: [memo, plan, routine, inspo, faith],
+    faith: [],
     inspos: [
       { id: uid(), sectionId: inspo.id, kind: 'quote', text: 'The best time to plant a tree was 20 years ago. The second best time is now.', title: '', who: 'Proverb', note: '', rating: 0, date: dkey(), created: now, updated: now },
     ],
@@ -92,12 +95,16 @@ function load() {
   return seed();
 }
 function normalize(d) {
-  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.checks ||= {};
+  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.checks ||= {};
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
   if ((d.v || 1) < 2) migrateV2(d);
   if (d.v < 3) {
     if (!d.sections.some((s) => s.type === 'inspo')) d.sections.push({ id: uid(), name: 'Inspiration', icon: '✨', type: 'inspo', created: Date.now() });
     d.v = 3;
+  }
+  if (d.v < 4) {
+    if (!d.sections.some((s) => s.type === 'faith')) d.sections.push({ id: uid(), name: 'Faith', icon: '🙏', type: 'faith', created: Date.now() });
+    d.v = 4;
   }
   d.sections.forEach((s) => { if (s.type === 'plan') s.groups ||= []; });
   d.routines.forEach((r) => { if (!Array.isArray(r.times)) r.times = r.time ? [r.time] : []; delete r.time; });
@@ -202,7 +209,7 @@ function parseHash() {
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#new-memo') return quickNewMemo();
-  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) view.kind = prev.kind; closeDrawer(); render(); window.scrollTo(0, 0);
+  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; } closeDrawer(); render(); window.scrollTo(0, 0);
 });
 
 /* ───────── render ───────── */
@@ -219,7 +226,7 @@ function render() {
     title = `${sec.icon} ${sec.name}`;
     const grp = sec.type === 'plan' && view.group ? (sec.groups || []).find((g) => g.id === view.group) : null;
     if (grp) title = `${grp.icon} ${grp.name}`;
-    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : renderRoutineSection(sec);
+    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : sec.type === 'faith' ? renderFaithSection(sec) : renderRoutineSection(sec);
   }
   hydrateImgs(main);
   $('#topbarTitle').textContent = title;
@@ -231,6 +238,7 @@ function renderSidebar() {
   const active = (n, id, g) => (view.name === n && (!id || view.id === id) && (g === undefined || (view.group || null) === g) ? ' active' : '');
   const count = (s) => s.type === 'memo' ? S.memos.filter((m) => m.sectionId === s.id).length
     : s.type === 'inspo' ? S.inspos.filter((x) => x.sectionId === s.id).length
+    : s.type === 'faith' ? (S.faith.filter((x) => x.sectionId === s.id && x.kind === 'prayer' && !x.answered).length || '')
     : s.type === 'plan' ? S.plans.filter((p) => p.sectionId === s.id && !p.done).length
       : (() => { const rs = S.routines.filter((r) => r.sectionId === s.id && isOn(r)); return rs.length ? `${rs.filter((r) => isChecked(r.id)).length}/${rs.length}` : ''; })();
   $('#sidebar').innerHTML = `
@@ -326,6 +334,13 @@ function renderToday() {
           </button>`).join('')}</div>` : `<div class="empty">No memos yet</div>`}
       </div>
     </div>
+    ${(() => {
+      const secs = new Set(S.sections.filter((x) => x.type === 'faith').map((x) => x.id));
+      const vs = S.faith.filter((x) => secs.has(x.sectionId) && x.kind === 'verse' && x.text);
+      if (!vs.length) return '';
+      const n = [...dkey()].reduce((a, c) => a * 17 + c.charCodeAt(0), 3) >>> 0;
+      return `<div class="section-title">✝️ Verse for today</div>${verseCard(vs[n % vs.length], true)}`;
+    })()}
     ${(() => {
       const secs = new Set(S.sections.filter((x) => x.type === 'inspo').map((x) => x.id));
       const pool = S.inspos.filter((x) => secs.has(x.sectionId) && x.text);
@@ -590,6 +605,141 @@ function renderInspoSection(sec) {
     <button class="fab" data-act="new-inspo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>Add</button>`;
 }
 
+/* ── Faith ── */
+const FKINDS = {
+  qt: { icon: '📖', label: 'QT', add: 'New QT' },
+  prayer: { icon: '🙏', label: 'Prayer', add: 'Prayer' },
+  verse: { icon: '✝️', label: 'Verses', add: 'Verse' },
+};
+const fShortDate = (k) => { if (!k) return ''; const d = parseKey(k); return `${WD[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== new Date().getFullYear() ? ', ' + d.getFullYear() : ''}`; };
+const daysSince = (ts) => Math.max(0, Math.floor((Date.now() - ts) / 864e5));
+function verseCard(v, wide) {
+  return `<button class="card inspo quote verse${wide ? ' wide' : ''}" data-act="open-faith" data-id="${v.id}">
+    <div class="q-text">${esc(v.text || v.ref)}</div>
+    ${v.ref ? `<div class="q-by">${esc(v.ref)}</div>` : ''}
+    ${v.note ? `<div class="q-note">${esc(v.note)}</div>` : ''}
+  </button>`;
+}
+function qtCard(q) {
+  return `<button class="card qt-card" data-act="open-faith" data-id="${q.id}">
+    <div class="qt-top"><span class="qt-date">${fShortDate(q.date)}</span>${q.passage ? `<span class="qt-passage">${esc(q.passage)}</span>` : ''}</div>
+    ${q.title ? `<div class="qt-title">${esc(q.title)}</div>` : ''}
+    ${q.note ? `<div class="qt-body">${esc(q.note)}</div>` : ''}
+    ${q.apply ? `<div class="qt-apply">✔︎ ${esc(q.apply)}</div>` : ''}
+  </button>`;
+}
+function prayerRow(p) {
+  return `<div class="card prayer${p.answered ? ' answered' : ''}">
+    <button class="check${p.answered ? ' on' : ''}" data-act="toggle-prayer" data-id="${p.id}" aria-label="Mark answered">${svgCheck}</button>
+    <button class="p-main" data-act="open-faith" data-id="${p.id}">
+      <div class="p-title">${esc(p.title || 'Untitled')}</div>
+      <div class="p-meta">
+        ${p.who ? `<span class="chip">🤍 ${esc(p.who)}</span>` : ''}
+        ${p.answered ? `<span class="chip today">🙌 Answered${p.answeredAt ? ' · ' + fShortDate(dkey(new Date(p.answeredAt))) : ''}</span>`
+          : `<span class="chip">Praying ${daysSince(p.created) ? `· day ${daysSince(p.created) + 1}` : '· since today'}</span>`}
+      </div>
+    </button>
+  </div>`;
+}
+function renderFaithSection(sec) {
+  const all = S.faith.filter((x) => x.sectionId === sec.id);
+  const tab = FKINDS[view.ftab] ? view.ftab : 'qt';
+  const items = all.filter((x) => x.kind === tab);
+  const n = (k) => all.filter((x) => x.kind === k && (k !== 'prayer' || !x.answered)).length;
+  let body = '';
+  if (tab === 'qt') {
+    items.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.created - a.created);
+    const todayDone = items.some((q) => q.date === dkey());
+    body = `${!todayDone ? `<button class="card qt-today" data-act="new-faith" data-sec="${sec.id}" data-k="qt"><span>📖</span><div><b>Today's QT</b><small>${fShortDate(dkey())} · tap to begin</small></div><em>＋</em></button>` : ''}
+      ${items.length ? `<div class="list">${items.map(qtCard).join('')}</div>` : `<div class="empty"><div class="e-icon">📖</div>Your devotion notes will gather here</div>`}`;
+  } else if (tab === 'prayer') {
+    const open = items.filter((p) => !p.answered).sort((a, b) => b.created - a.created);
+    const done = items.filter((p) => p.answered).sort((a, b) => (b.answeredAt || 0) - (a.answeredAt || 0));
+    body = `<form class="card quick-add" data-form="quick-prayer" data-sec="${sec.id}">
+        <span style="font-size:17px">🙏</span><input name="title" placeholder="Add a prayer request…" autocomplete="off" />
+      </form>
+      ${open.length ? `<div class="section-title">Praying <span class="count">${open.length}</span></div><div class="list">${open.map(prayerRow).join('')}</div>`
+        : !done.length ? `<div class="empty" style="margin-top:14px"><div class="e-icon">🙏</div>Write down what you're praying for</div>` : ''}
+      ${done.length ? `<details class="done-group"${view.showAnswered ? ' open' : ''} data-key="answered"><summary class="section-title">🙌 Answered <span class="count">${done.length}</span><span class="link">Show / hide</span></summary>
+        <div class="list">${done.map(prayerRow).join('')}</div></details>` : ''}`;
+  } else {
+    items.sort((a, b) => b.created - a.created);
+    body = items.length ? `<div class="quote-list">${items.map((v) => verseCard(v)).join('')}</div>` : `<div class="empty"><div class="e-icon">✝️</div>Keep the verses you want to hold onto</div>`;
+  }
+  const answered = all.filter((x) => x.kind === 'prayer' && x.answered).length;
+  return `
+    ${sectionHead(sec, `${all.filter((x) => x.kind === 'qt').length} QT · ${n('prayer')} praying${answered ? ` · ${answered} answered` : ''} · ${(() => { const v = all.filter((x) => x.kind === 'verse').length; return `${v} verse${v === 1 ? '' : 's'}`; })()}`)}
+    <div class="tabs">${Object.entries(FKINDS).map(([k, v]) => `<button class="tab${tab === k ? ' on' : ''}" data-act="faith-tab" data-k="${k}">${v.icon} ${v.label}${n(k) ? ` <span>${n(k)}</span>` : ''}</button>`).join('')}</div>
+    ${body}
+    <button class="fab" data-act="new-faith" data-sec="${sec.id}" data-k="${tab}"><span style="font-size:22px;line-height:1">＋</span>${FKINDS[tab].add}</button>`;
+}
+
+const faithHas = (x) => [x.title, x.note, x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].some((v) => (v || '').trim());
+function openFaith(id, draft) {
+  const x = draft || S.faith.find((i) => i.id === id);
+  if (!x) return;
+  const isNew = !!draft;
+  const k = FKINDS[x.kind];
+  const upd = () => { x.updated = Date.now(); if (!isNew) save(true); };
+  const grow = (el, min = 0.38) => { if (!el) return; el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, window.innerHeight * min) + 'px'; };
+  let form = '';
+  if (x.kind === 'qt') {
+    form = `
+      <div class="qt-head">
+        <input type="date" class="i-sub-in qt-date-in" id="fDate" value="${x.date || ''}" />
+        <input class="i-title-in" id="fPassage" placeholder="Passage — e.g. 요한복음 15:1-8" value="${esc(x.passage)}" />
+        <input class="i-sub-in" id="fTitle" placeholder="Title (optional)" value="${esc(x.title)}" />
+      </div>
+      <label class="thought-label" for="fNote">Reflection</label>
+      <textarea class="thought-input" id="fNote" placeholder="What is God saying to me through this passage?">${esc(x.note)}</textarea>
+      <div class="field" style="margin-top:18px"><label>Application</label><textarea class="textarea" id="fApply" style="min-height:70px" placeholder="One thing I'll live out today">${esc(x.apply)}</textarea></div>
+      <div class="field"><label>Prayer</label><textarea class="textarea" id="fPray" style="min-height:70px" placeholder="My prayer">${esc(x.pray)}</textarea></div>`;
+  } else if (x.kind === 'prayer') {
+    form = `
+      <input class="i-title-in" id="fTitle" placeholder="Prayer request" value="${esc(x.title)}" style="margin-bottom:6px" />
+      <input class="i-sub-in" id="fWho" placeholder="For whom (optional)" value="${esc(x.who)}" />
+      <div class="meta-line" style="margin-top:10px">Started ${fShortDate(dkey(new Date(x.created)))} · ${daysSince(x.created) + 1} day${daysSince(x.created) ? 's' : ''} of prayer</div>
+      <label class="thought-label" for="fNote" style="margin-top:14px">Details</label>
+      <textarea class="thought-input" id="fNote" placeholder="What's on your heart about this?">${esc(x.note)}</textarea>
+      <div class="answer-box${x.answered ? ' on' : ''}" id="fAnsBox">
+        <button class="answer-toggle" id="fAns"><span class="check${x.answered ? ' on' : ''}">${svgCheck}</span>🙌 Answered</button>
+        <textarea class="textarea" id="fAnswer" style="min-height:70px;${x.answered ? '' : 'display:none'}" placeholder="How was it answered?">${esc(x.answer)}</textarea>
+      </div>`;
+  } else {
+    form = `
+      <textarea class="quote-input" id="fText" rows="2" placeholder="Write the verse…">${esc(x.text)}</textarea>
+      <input class="i-sub-in" id="fRef" placeholder="Reference — e.g. 시편 23:1" value="${esc(x.ref)}" style="margin-bottom:20px" />
+      <label class="thought-label" for="fNote">Thoughts</label>
+      <textarea class="thought-input" id="fNote" placeholder="Why does this verse speak to you?">${esc(x.note)}</textarea>`;
+  }
+  openSheet(`
+    <div class="sheet-bar">
+      <button class="icon-btn" data-act="faith-cancel" aria-label="${isNew ? 'Cancel' : 'Back'}">${isNew ? svgClose : svgBack}</button>
+      <div class="crumb crumb-strong">${k.icon} ${isNew ? (x.kind === 'qt' ? 'New QT' : `New ${k.add.toLowerCase()}`) : (x.kind === 'verse' ? 'Verse' : k.label)}</div>
+      ${isNew ? '' : `<button class="icon-btn" data-act="del-faith" aria-label="Delete">${svgTrash}</button>`}
+      <button class="done-btn" data-act="faith-done" aria-label="Save">${svgCheck}</button>
+    </div>
+    <div class="sheet-body"><div class="sheet-inner">${form}</div></div>`, {
+    type: 'faith', id: x.id, isNew, item: x,
+    onClose() {
+      if (isNew) { if (faithHas(x) && !this.discard) S.faith.push(x); }
+      else if (!faithHas(x)) S.faith = S.faith.filter((i) => i.id !== x.id);
+      save(true);
+    },
+  });
+  const bind = (sel, key, ev = 'input', after) => $(sel)?.addEventListener(ev, (e) => { x[key] = e.target.value; after?.(e.target); upd(); });
+  bind('#fDate', 'date', 'change'); bind('#fPassage', 'passage'); bind('#fTitle', 'title'); bind('#fApply', 'apply'); bind('#fPray', 'pray');
+  bind('#fWho', 'who'); bind('#fAnswer', 'answer'); bind('#fText', 'text'); bind('#fRef', 'ref');
+  bind('#fNote', 'note', 'input', (el) => grow(el));
+  grow($('#fNote'));
+  $('#fAns')?.addEventListener('click', () => {
+    x.answered = !x.answered; x.answeredAt = x.answered ? Date.now() : 0; upd();
+    $('#fAnsBox').classList.toggle('on', x.answered); $('#fAns .check').classList.toggle('on', x.answered);
+    $('#fAnswer').style.display = x.answered ? '' : 'none'; if (x.answered) $('#fAnswer').focus();
+  });
+  if (isNew) setTimeout(() => ($('#fPassage') || $('#fTitle') || $('#fText'))?.focus(), 280);
+}
+
 /* ── Search ── */
 function hl(text, q) {
   const t = esc(text);
@@ -617,7 +767,8 @@ function searchResults(q) {
   const ps = S.plans.filter((p) => (p.title + ' ' + (p.note || '') + ' ' + (p.steps || []).map((s) => s.text).join(' ')).toLowerCase().includes(lq));
   const rs = S.routines.filter((r) => r.name.toLowerCase().includes(lq));
   const xs = S.inspos.filter((x) => [x.title, x.who, x.text, x.note].join(' ').toLowerCase().includes(lq));
-  if (!ms.length && !ps.length && !rs.length && !xs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
+  const fs = S.faith.filter((x) => [x.title, x.note, x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].join(' ').toLowerCase().includes(lq));
+  if (!ms.length && !ps.length && !rs.length && !xs.length && !fs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
     ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
       <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
@@ -627,7 +778,8 @@ function searchResults(q) {
       </button>`).join('')}</div>` : ''}
     ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
     ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}
-    ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div>${inspoBlock(xs)}` : ''}`;
+    ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div>${inspoBlock(xs)}` : ''}
+    ${fs.length ? `<div class="section-title">🙏 Faith <span class="count">${fs.length}</span></div><div class="list">${fs.map((x) => x.kind === 'qt' ? qtCard(x) : x.kind === 'prayer' ? prayerRow(x) : verseCard(x, true)).join('')}</div>` : ''}`;
 }
 
 /* ── Settings ── */
@@ -1142,7 +1294,7 @@ const actions = {
   'del-section': async (el) => {
     const sec = S.sections.find((s) => s.id === el.dataset.id);
     closeModal();
-    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length + S.inspos.filter((x) => x.sectionId === sec.id).length;
+    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length + S.inspos.filter((x) => x.sectionId === sec.id).length + S.faith.filter((x) => x.sectionId === sec.id).length;
     if (!(await ask('Delete this section?', `"${esc(sec.name)}"${n ? ` and its ${n} item${n === 1 ? '' : 's'}` : ''} will be removed.`, 'Delete', true))) return;
     S.sections = S.sections.filter((s) => s.id !== sec.id);
     S.memos = S.memos.filter((m) => m.sectionId !== sec.id);
@@ -1150,6 +1302,7 @@ const actions = {
     S.routines = S.routines.filter((r) => r.sectionId !== sec.id);
     S.inspos.filter((x) => x.sectionId === sec.id && x.img).forEach((x) => imgDel(x.img));
     S.inspos = S.inspos.filter((x) => x.sectionId !== sec.id);
+    S.faith = S.faith.filter((x) => x.sectionId !== sec.id);
     save(); toast('Section deleted'); go('#today');
   },
   'modal-yes': () => closeModal(true),
@@ -1195,6 +1348,33 @@ const actions = {
     closeSheet();
   },
   'open-inspo': (el) => openInspo(el.dataset.id),
+  'faith-tab': (el) => { view.ftab = el.dataset.k; render(); },
+  'new-faith': (el) => {
+    const kind = el.dataset.k || 'qt';
+    openFaith(null, { id: uid(), sectionId: el.dataset.sec, kind, title: '', note: '', passage: '', apply: '', pray: '', text: '', ref: '', who: '', answer: '', answered: false, answeredAt: 0, date: dkey(), created: Date.now(), updated: Date.now() });
+  },
+  'open-faith': (el) => openFaith(el.dataset.id),
+  'toggle-prayer': (el) => {
+    const p = S.faith.find((x) => x.id === el.dataset.id); p.answered = !p.answered; p.answeredAt = p.answered ? Date.now() : 0;
+    save(); if (p.answered) toast('Answered prayer 🙌'); render();
+  },
+  'faith-done': () => {
+    const { item, isNew } = sheetCtx; const has = faithHas(item);
+    closeSheet(); if (has) toast(isNew ? 'Saved 🙏' : 'Saved ✓');
+  },
+  'faith-cancel': async () => {
+    const ctx = sheetCtx;
+    if (ctx.isNew && faithHas(ctx.item)) {
+      if (!(await ask('Discard this entry?', 'What you wrote won\'t be saved.', 'Discard', true))) return;
+      ctx.discard = true;
+    }
+    closeSheet();
+  },
+  'del-faith': async () => {
+    const id = sheetCtx.id;
+    if (!(await ask('Delete this entry?', 'This can\'t be undone.', 'Delete', true))) return;
+    S.faith = S.faith.filter((x) => x.id !== id); save(true); closeSheet(); toast('Deleted');
+  },
   'del-inspo': async () => {
     const id = sheetCtx.id;
     if (!(await ask('Delete this item?', 'This can\'t be undone.', 'Delete', true))) return;
@@ -1285,6 +1465,11 @@ document.addEventListener('submit', (e) => {
     const m = newMemo(sec.id); m.title = first.slice(0, 60); m.body = rest.join('\n'); save();
     f.q.value = ''; toast(`Saved to ${sec.icon} ${sec.name}`); render();
   }
+  if (f.dataset.form === 'quick-prayer') {
+    const v = f.title.value.trim(); if (!v) return;
+    S.faith.push({ id: uid(), sectionId: f.dataset.sec, kind: 'prayer', title: v, note: '', who: '', answer: '', answered: false, answeredAt: 0, date: dkey(), created: Date.now(), updated: Date.now() });
+    save(); render(); setTimeout(() => $('[data-form="quick-prayer"] input')?.focus(), 0);
+  }
   if (f.dataset.form === 'quick-plan') {
     const v = f.title.value.trim(); if (!v) return;
     S.plans.push({ id: uid(), sectionId: f.dataset.sec, groupId: f.dataset.group || '', title: v, note: '', due: f.due.value || '', priority: 0, done: false, steps: [], created: Date.now() });
@@ -1321,7 +1506,7 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if ($('#modal').classList.contains('open')) closeModal(false); else if ($('#sheet').classList.contains('open')) closeSheet(); else closeDrawer(); }
 });
-document.addEventListener('toggle', (e) => { if (e.target.matches?.('details.done-group')) view.showDone = e.target.open; }, true);
+document.addEventListener('toggle', (e) => { if (e.target.matches?.('details.done-group')) { if (e.target.dataset.key === 'answered') view.showAnswered = e.target.open; else view.showDone = e.target.open; } }, true);
 
 let toastTm;
 function toast(msg) {

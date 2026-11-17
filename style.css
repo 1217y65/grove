@@ -590,3 +590,32 @@ mark { background: #e6dcb8; color: inherit; border-radius: 3px; padding: 0 1px; 
 }
 .kind-pick button span { font-size: 28px; line-height: 1; }
 .kind-pick button:hover, .kind-pick button:active { border-color: var(--g-500); background: var(--g-100); }
+
+/* v1.6: Faith */
+.qt-today {
+  width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 16px 18px; margin-bottom: 14px;
+  background: var(--g-100); border-color: #cbdcc8;
+}
+.qt-today > span { font-size: 26px; }
+.qt-today div { flex: 1; display: flex; flex-direction: column; }
+.qt-today b { font-size: 16px; }
+.qt-today small { color: var(--ink-2); font-size: 13px; }
+.qt-today em { font-style: normal; width: 34px; height: 34px; border-radius: 50%; background: var(--g-800); color: var(--ivory); display: grid; place-items: center; font-size: 18px; }
+.qt-card { text-align: left; padding: 15px 17px; display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.qt-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.qt-date { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.qt-passage { font-size: 12.5px; font-weight: 650; color: var(--g-700); background: var(--g-100); padding: 1px 9px; border-radius: 99px; }
+.qt-title { font-weight: 700; font-size: 16px; }
+.qt-body { color: var(--ink-2); font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.qt-apply { font-size: 13px; color: var(--g-700); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qt-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
+.qt-date-in { width: auto; align-self: flex-start; border-bottom: 0; color: var(--g-600); font-weight: 600; padding: 0; }
+.prayer { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.prayer.answered { background: var(--g-100); border-color: #cbdcc8; }
+.prayer.answered .p-title { color: var(--ink-2); }
+.answer-box { margin-top: 18px; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--paper); display: flex; flex-direction: column; gap: 10px; }
+.answer-box.on { background: var(--g-100); border-color: #cbdcc8; }
+.answer-toggle { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; align-self: flex-start; }
+.answer-toggle .check { width: 26px; height: 26px; }
+.inspo.quote.verse { background: linear-gradient(160deg, var(--g-700), var(--g-900)); }
+.inspo.quote.verse .q-by { color: var(--g-300); font-weight: 600; }
