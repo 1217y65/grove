@@ -423,3 +423,10 @@ mark { background: #e6dcb8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .title-input:focus-visible, .body-input:focus-visible, .quick input:focus-visible,
 .search-box input:focus-visible, .quick-add input:focus-visible, .step input:focus-visible { outline: none; }
 .search-box:focus-within, .quick:focus-within, .quick-add:focus-within { border-color: var(--g-500); }
+
+/* English display type */
+:root { --display: "Fraunces", Georgia, "Times New Roman", serif; }
+.brand-name { font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.brand-sub { font-style: italic; font-family: var(--display); font-size: 12.5px; }
+.page-title.display { font-family: var(--display); font-weight: 600; letter-spacing: -.015em; }
+.nav-head span { letter-spacing: .1em; font-size: 11px; }

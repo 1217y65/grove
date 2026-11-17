@@ -1,4 +1,4 @@
-/* 나의 숲 — 기록장 */
+/* Grove */
 'use strict';
 
 /* ───────── helpers ───────── */
@@ -7,7 +7,11 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const pad = (n) => String(n).padStart(2, '0');
-const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WD2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const WDL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const dkey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const hhmm = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const parseKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
@@ -17,9 +21,9 @@ const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + 
 const KEY = 'grove-data-v1';
 const ICONS = ['💭', '📝', '🎯', '🌱', '📚', '💡', '✏️', '📅', '🗂️', '🧠', '💼', '🏃', '🧘', '💧', '🍎', '💤', '🎵', '🎨', '✈️', '🏠', '💰', '❤️', '🙏', '⭐', '🔥', '🌿', '☕', '🧪', '📖', '🛒', '🎁', '📌'];
 const TYPES = {
-  memo: { icon: '📝', label: '메모', desc: '생각 정리 · 기록' },
-  plan: { icon: '🎯', label: '계획', desc: '할 일 · 목표' },
-  routine: { icon: '🌱', label: '매일 루틴', desc: '반복 · 체크' },
+  memo: { icon: '📝', label: 'Memo', desc: 'Notes · Thoughts' },
+  plan: { icon: '🎯', label: 'Plan', desc: 'Tasks · Goals' },
+  routine: { icon: '🌱', label: 'Routine', desc: 'Daily habits' },
 };
 
 const svgCheck = '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -36,28 +40,27 @@ let installEvt = null;
 
 function seed() {
   const s = (name, icon, type) => ({ id: uid(), name, icon, type, created: Date.now() });
-  const think = s('생각 정리', '💭', 'memo');
-  const memo = s('메모', '📝', 'memo');
-  const plan = s('계획', '🎯', 'plan');
-  const routine = s('매일 루틴', '🌱', 'routine');
+  const memo = s('Memo', '📝', 'memo');
+  const plan = s('Plan', '🎯', 'plan');
+  const routine = s('Routine', '🌱', 'routine');
   const now = Date.now();
   return {
-    v: 1,
-    sections: [think, memo, plan, routine],
+    v: 2,
+    sections: [memo, plan, routine],
     memos: [
       {
-        id: uid(), sectionId: think.id, pinned: true, created: now, updated: now,
-        title: '나의 숲 사용법 🌿',
-        body: '• 왼쪽 메뉴의 "섹션 +" 로 원하는 만큼 공간을 만들 수 있어요.\n  - 메모형: 생각 정리, 일기, 아이디어\n  - 계획형: 할 일, 목표, 프로젝트\n  - 루틴형: 매일/요일별 반복 습관\n\n• 루틴에 시간을 정하고 설정에서 알림을 켜면 그 시간에 알려드려요.\n• 휴대폰 브라우저에서 "홈 화면에 추가"하면 앱처럼 쓸 수 있어요.\n\n이 메모는 지워도 괜찮아요.',
+        id: uid(), sectionId: memo.id, pinned: true, created: now, updated: now,
+        title: 'Welcome to Grove 🌿',
+        body: '• Use "+ New section" in the sidebar to add as many spaces as you like.\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
       },
     ],
     plans: [
-      { id: uid(), sectionId: plan.id, title: '나의 숲 둘러보기', note: '', due: dkey(), priority: 1, done: false, created: now,
-        steps: [{ id: uid(), text: '섹션 하나 만들어보기', done: false }, { id: uid(), text: '루틴 체크해보기', done: false }, { id: uid(), text: '알림 켜기', done: false }] },
+      { id: uid(), sectionId: plan.id, title: 'Explore Grove', note: '', due: dkey(), priority: 1, done: false, created: now,
+        steps: [{ id: uid(), text: 'Create a new section', done: false }, { id: uid(), text: 'Check off a routine', done: false }, { id: uid(), text: 'Turn on notifications', done: false }] },
     ],
     routines: [
-      { id: uid(), sectionId: routine.id, name: '물 한 잔 마시기', icon: '💧', time: '08:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
-      { id: uid(), sectionId: routine.id, name: '하루 돌아보기', icon: '✏️', time: '22:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
+      { id: uid(), sectionId: routine.id, name: 'Drink a glass of water', icon: '💧', time: '08:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
+      { id: uid(), sectionId: routine.id, name: 'Daily reflection', icon: '✏️', time: '22:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
     ],
     checks: {},
     settings: { notify: false, remindAt: '21:00', remind: true, notified: {} },
@@ -74,12 +77,34 @@ function load() {
 function normalize(d) {
   d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.checks ||= {};
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
+  if ((d.v || 1) < 2) migrateV2(d);
   return d;
+}
+/* v2: English default section names, drop the old "생각 정리" section (its memos move to Memo) */
+function migrateV2(d) {
+  const rename = { '메모': 'Memo', '계획': 'Plan', '매일 루틴': 'Routine' };
+  d.sections.forEach((s) => { if (rename[s.name]) s.name = rename[s.name]; });
+  const think = d.sections.find((s) => s.name === '생각 정리' && s.type === 'memo');
+  if (think) {
+    const welcome = '나의 숲 사용법 🌿';
+    d.memos = d.memos.filter((m) => !(m.sectionId === think.id && m.title === welcome));
+    const rest = d.memos.filter((m) => m.sectionId === think.id);
+    if (rest.length) {
+      let memo = d.sections.find((s) => s.type === 'memo' && s.id !== think.id);
+      if (!memo) { memo = { id: uid(), name: 'Memo', icon: '📝', type: 'memo', created: Date.now() }; d.sections.unshift(memo); }
+      rest.forEach((m) => { m.sectionId = memo.id; });
+    }
+    d.sections = d.sections.filter((s) => s.id !== think.id);
+  }
+  const sample = { '\uB098\uC758 \uC232 \uB458\uB7EC\uBCF4\uAE30': 'Explore Grove', '\uC139\uC158 \uD558\uB098 \uB9CC\uB4E4\uC5B4\uBCF4\uAE30': 'Create a new section', '\uB8E8\uD2F4 \uCCB4\uD06C\uD574\uBCF4\uAE30': 'Check off a routine', '\uC54C\uB9BC \uCF1C\uAE30': 'Turn on notifications', '\uBB3C \uD55C \uC794 \uB9C8\uC2DC\uAE30': 'Drink a glass of water', '\uD558\uB8E8 \uB3CC\uC544\uBCF4\uAE30': 'Daily reflection' };
+  d.plans.forEach((p) => { if (sample[p.title]) p.title = sample[p.title]; (p.steps || []).forEach((st) => { if (sample[st.text]) st.text = sample[st.text]; }); });
+  d.routines.forEach((r) => { if (sample[r.name]) r.name = sample[r.name]; });
+  d.v = 2;
 }
 
 let saveTimer;
 function save(quiet) {
-  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('저장 공간이 부족해요'); }
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Storage is full'); }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(syncSchedule, 400);
   if (!quiet) renderSidebar();
@@ -109,10 +134,10 @@ function streak(r) {
 }
 function daysLabel(days) {
   const s = [...days].sort().join('');
-  if (s === '0123456') return '매일';
-  if (s === '12345') return '평일';
-  if (s === '06') return '주말';
-  return [1, 2, 3, 4, 5, 6, 0].filter((x) => days.includes(x)).map((x) => WD[x]).join('·');
+  if (s === '0123456') return 'Every day';
+  if (s === '12345') return 'Weekdays';
+  if (s === '06') return 'Weekends';
+  return [1, 2, 3, 4, 5, 6, 0].filter((x) => days.includes(x)).map((x) => WD[x]).join(' · ');
 }
 function todayRoutines() {
   const routineSecs = new Set(S.sections.filter((s) => s.type === 'routine').map((s) => s.id));
@@ -125,11 +150,11 @@ function dueLabel(due) {
   if (!due) return '';
   const t = dkey();
   const diff = Math.round((parseKey(due) - parseKey(t)) / 864e5);
-  if (diff === 0) return '오늘';
-  if (diff === 1) return '내일';
-  if (diff === -1) return '어제';
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff === -1) return 'Yesterday';
   const d = parseKey(due);
-  const base = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
+  const base = `${WD[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}`;
   if (diff > 0 && diff <= 30) return `${base} · D-${diff}`;
   return base;
 }
@@ -160,10 +185,10 @@ window.addEventListener('hashchange', () => {
 function render() {
   renderSidebar();
   const main = $('#main');
-  let title = '나의 숲';
+  let title = 'Grove';
   if (view.name === 'today') main.innerHTML = renderToday();
-  else if (view.name === 'search') { main.innerHTML = renderSearch(); title = '검색'; }
-  else if (view.name === 'settings') { main.innerHTML = renderSettings(); title = '설정'; }
+  else if (view.name === 'search') { main.innerHTML = renderSearch(); title = 'Search'; }
+  else if (view.name === 'settings') { main.innerHTML = renderSettings(); title = 'Settings'; }
   else if (view.name === 'section') {
     const sec = S.sections.find((s) => s.id === view.id);
     if (!sec) { view = { name: 'today' }; return go('#today'); }
@@ -171,7 +196,7 @@ function render() {
     main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : renderRoutineSection(sec);
   }
   $('#topbarTitle').textContent = title;
-  document.title = title === '나의 숲' ? '나의 숲 — 기록장' : `${title} · 나의 숲`;
+  document.title = title === 'Grove' ? 'Grove' : `${title} · Grove`;
   if (view.name === 'search') { const i = $('#searchInput'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
 }
 
@@ -183,11 +208,10 @@ function renderSidebar() {
   $('#sidebar').innerHTML = `
     <div class="brand">
       <div class="brand-mark">${svgLeaf}</div>
-      <div><div class="brand-name">나의 숲</div><div class="brand-sub">나만의 기록장</div></div>
+      <div><div class="brand-name">Grove</div><div class="brand-sub">your quiet place to grow</div></div>
     </div>
-    <button class="nav-item${active('today')}" data-act="go" data-to="#today"><span class="ni-icon">🏡</span><span class="ni-label">오늘</span></button>
-    <button class="nav-item${active('search')}" data-act="go" data-to="#search"><span class="ni-icon">🔍</span><span class="ni-label">검색</span></button>
-    <div class="nav-head"><span>섹션</span><button class="nav-add" data-act="new-section" aria-label="섹션 추가">+</button></div>
+    <button class="nav-item${active('today')}" data-act="go" data-to="#today"><span class="ni-icon">🏡</span><span class="ni-label">Today</span></button>
+    <div class="nav-head"><span>SECTIONS</span><button class="nav-add" data-act="new-section" aria-label="Add section">+</button></div>
     <div class="nav-sections">
       ${S.sections.map((s) => `
         <button class="nav-item${active('section', s.id)}" data-act="go" data-to="#s-${s.id}">
@@ -195,9 +219,10 @@ function renderSidebar() {
           <span class="ni-count">${count(s)}</span>
         </button>`).join('')}
     </div>
-    <button class="nav-new" data-act="new-section">＋ 새 섹션 만들기</button>
+    <button class="nav-new" data-act="new-section">＋ New section</button>
     <div class="nav-spacer"></div>
-    <button class="nav-item${active('settings')}" data-act="go" data-to="#settings"><span class="ni-icon">⚙️</span><span class="ni-label">설정 · 알림 · 백업</span></button>
+    <button class="nav-item${active('search')}" data-act="go" data-to="#search"><span class="ni-icon">🔍</span><span class="ni-label">Search</span></button>
+    <button class="nav-item${active('settings')}" data-act="go" data-to="#settings"><span class="ni-icon">⚙️</span><span class="ni-label">Settings</span></button>
   `;
 }
 
@@ -212,11 +237,11 @@ function ring(pct, size = 64) {
 }
 function greeting() {
   const h = new Date().getHours();
-  if (h < 5) return '고요한 밤이에요 🌙';
-  if (h < 11) return '좋은 아침이에요 ☀️';
-  if (h < 17) return '좋은 오후예요 🌿';
-  if (h < 21) return '수고한 저녁이에요 🌇';
-  return '오늘 하루도 고생했어요 🌙';
+  if (h < 5) return 'Good night 🌙';
+  if (h < 11) return 'Good morning ☀️';
+  if (h < 17) return 'Good afternoon 🌿';
+  if (h < 21) return 'Good evening 🌇';
+  return 'Wind down, well done 🌙';
 }
 function renderToday() {
   const now = new Date();
@@ -230,42 +255,42 @@ function renderToday() {
     .sort((a, b) => a.due.localeCompare(b.due) || b.priority - a.priority);
   const memoSecs = new Set(S.sections.filter((s) => s.type === 'memo').map((s) => s.id));
   const recent = S.memos.filter((m) => memoSecs.has(m.sectionId)).sort((a, b) => b.updated - a.updated).slice(0, 4);
-  const msg = !rs.length ? '오늘 예정된 루틴이 없어요' : done === rs.length ? '오늘 루틴을 모두 끝냈어요! 🎉' : `${rs.length - done}개 남았어요. 하나씩 해볼까요?`;
+  const msg = !rs.length ? 'No routines scheduled today' : done === rs.length ? 'All done for today! 🎉' : `${rs.length - done} to go — one step at a time.`;
 
   return `
     <div class="hello">${greeting()}</div>
-    <h1 class="page-title">${now.getMonth() + 1}월 ${now.getDate()}일 ${WD[now.getDay()]}요일</h1>
+    <h1 class="page-title display">${WDL[now.getDay()]}, ${MONL[now.getMonth()]} ${now.getDate()}</h1>
     <form class="card quick" data-form="quick-memo">
-      <input name="q" placeholder="💭 떠오른 생각을 바로 적어보세요" autocomplete="off" />
-      <button class="btn btn-primary btn-sm" type="submit">기록</button>
+      <input name="q" placeholder="💭 Capture a thought…" autocomplete="off" />
+      <button class="btn btn-primary btn-sm" type="submit">Save</button>
     </form>
 
     <div class="progress-card">
       ${ring(pct)}
       <div class="pc-text">
-        <div class="pc-big">오늘의 루틴 ${done}/${rs.length}</div>
+        <div class="pc-big">Today's routines ${done}/${rs.length}</div>
         <div class="pc-small">${msg}</div>
       </div>
     </div>
 
-    <div class="section-title">🌱 오늘 할 루틴</div>
+    <div class="section-title">🌱 Routines for today</div>
     ${rs.length ? `<div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>`
-      : `<div class="empty"><div class="e-icon">🌱</div>루틴 섹션에서 매일 할 일을 추가해보세요</div>`}
+      : `<div class="empty"><div class="e-icon">🌱</div>Add daily habits in a Routine section</div>`}
 
     <div class="grid-2">
       <div>
-        <div class="section-title">🎯 다가오는 계획 <span class="count">${urgent.length}</span></div>
+        <div class="section-title">🎯 Upcoming <span class="count">${urgent.length}</span></div>
         ${urgent.length ? `<div class="list">${urgent.slice(0, 8).map((p) => planRow(p, true)).join('')}</div>`
-          : `<div class="empty">7일 안에 마감인 계획이 없어요</div>`}
+          : `<div class="empty">Nothing due in the next 7 days</div>`}
       </div>
       <div>
-        <div class="section-title">📝 최근 메모</div>
+        <div class="section-title">📝 Recent memos</div>
         ${recent.length ? `<div class="list">${recent.map((m) => `
           <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
-            <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || '제목 없음')}</span></div>
+            <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
             ${m.body ? `<div class="m-body" style="-webkit-line-clamp:2">${esc(m.body)}</div>` : ''}
             <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
-          </button>`).join('')}</div>` : `<div class="empty">아직 메모가 없어요</div>`}
+          </button>`).join('')}</div>` : `<div class="empty">No memos yet</div>`}
       </div>
     </div>
     ${t ? '' : ''}`;
@@ -273,12 +298,12 @@ function renderToday() {
 const secName = (id) => { const s = S.sections.find((x) => x.id === id); return s ? `${esc(s.icon)} ${esc(s.name)}` : ''; };
 function relTime(ts) {
   const diff = (Date.now() - ts) / 1000;
-  if (diff < 60) return '방금';
-  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   const d = new Date(ts);
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
-  return `${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '. ' : ''}${d.getMonth() + 1}. ${d.getDate()}.`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+  return `${MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== new Date().getFullYear() ? ', ' + d.getFullYear() : ''}`;
 }
 
 /* ── Routine ── */
@@ -292,16 +317,16 @@ function routineRow(r, showSec) {
     const d = addDays(today, -i);
     const sched = isOn(r, d);
     const c = isChecked(r.id, dkey(d));
-    dots.push(`<div class="d${i === 0 ? ' today' : ''}"><div class="dot${c ? ' on' : sched ? '' : ' skip'}"></div><span>${WD[d.getDay()]}</span></div>`);
+    dots.push(`<div class="d${i === 0 ? ' today' : ''}"><div class="dot${c ? ' on' : sched ? '' : ' skip'}"></div><span>${WD2[d.getDay()]}</span></div>`);
   }
   return `
     <div class="card routine${done ? ' done' : ''}${on ? '' : ' off'}">
-      <button class="check${done ? ' on' : ''}" data-act="toggle-routine" data-id="${r.id}" aria-label="완료 체크" ${on ? '' : 'disabled'}>${svgCheck}</button>
+      <button class="check${done ? ' on' : ''}" data-act="toggle-routine" data-id="${r.id}" aria-label="Mark done" ${on ? '' : 'disabled'}>${svgCheck}</button>
       <button class="r-main" data-act="edit-routine" data-id="${r.id}">
         <div class="r-name">${esc(r.icon || '')} ${esc(r.name)}</div>
         <div class="r-meta">
           ${r.time ? `<span>⏰ ${r.time}</span>` : ''}<span>${daysLabel(r.days)}</span>
-          ${st ? `<span class="streak">🔥 ${st}일 연속</span>` : ''}
+          ${st ? `<span class="streak">🔥 ${st}-day streak</span>` : ''}
           ${showSec ? `<span>${secName(r.sectionId)}</span>` : ''}
         </div>
       </button>
@@ -313,7 +338,7 @@ function sectionHead(sec, sub) {
     <div class="page-head">
       <div class="page-icon">${esc(sec.icon)}</div>
       <div class="grow"><h1 class="page-title">${esc(sec.name)}</h1><div class="page-sub">${sub}</div></div>
-      <button class="icon-btn" data-act="edit-section" data-id="${sec.id}" aria-label="섹션 설정">${svgMore}</button>
+      <button class="icon-btn" data-act="edit-section" data-id="${sec.id}" aria-label="Section settings">${svgMore}</button>
     </div>`;
 }
 function renderRoutineSection(sec) {
@@ -322,12 +347,12 @@ function renderRoutineSection(sec) {
   const rest = all.filter((r) => !isOn(r));
   const done = today.filter((r) => isChecked(r.id)).length;
   return `
-    ${sectionHead(sec, `매일 루틴 · 오늘 ${done}/${today.length} 완료`)}
+    ${sectionHead(sec, `Routine · ${done}/${today.length} done today`)}
     ${today.length ? `<div class="list">${today.map((r) => routineRow(r)).join('')}</div>`
-      : `<div class="empty"><div class="e-icon">🌱</div>오늘 할 루틴이 없어요.<br/>아래 버튼으로 습관을 추가해보세요.</div>`}
-    ${rest.length ? `<div class="section-title">😴 오늘은 쉬는 루틴 <span class="count">${rest.length}</span></div>
+      : `<div class="empty"><div class="e-icon">🌱</div>Nothing scheduled for today.<br/>Add a habit with the button below.</div>`}
+    ${rest.length ? `<div class="section-title">😴 Resting today <span class="count">${rest.length}</span></div>
       <div class="list">${rest.map((r) => routineRow(r)).join('')}</div>` : ''}
-    <button class="fab" data-act="new-routine" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>새 루틴</button>`;
+    <button class="fab" data-act="new-routine" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>New routine</button>`;
 }
 
 /* ── Memo ── */
@@ -338,16 +363,16 @@ function renderMemoSection(sec) {
   if (q) ms = ms.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(q));
   ms.sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
   return `
-    ${sectionHead(sec, `메모 ${total}개`)}
-    ${total > 3 ? `<div class="toolbar-row"><label class="search-box">🔍<input id="memoFilter" placeholder="이 섹션에서 찾기" value="${esc(view.mq || '')}" /></label></div>` : ''}
+    ${sectionHead(sec, `${total} memo${total === 1 ? '' : 's'}`)}
+    ${total > 3 ? `<div class="toolbar-row"><label class="search-box">🔍<input id="memoFilter" placeholder="Search this section" value="${esc(view.mq || '')}" /></label></div>` : ''}
     <div id="memoList">${memoGrid(ms, total)}</div>
-    <button class="fab" data-act="new-memo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>새 메모</button>`;
+    <button class="fab" data-act="new-memo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>New memo</button>`;
 }
 function memoGrid(ms, total) {
-  if (!ms.length) return `<div class="empty"><div class="e-icon">💭</div>${total ? '찾는 메모가 없어요' : '첫 메모를 남겨보세요'}</div>`;
+  if (!ms.length) return `<div class="empty"><div class="e-icon">💭</div>${total ? 'No matching memos' : 'Write your first memo'}</div>`;
   return `<div class="memo-grid">${ms.map((m) => `
     <button class="card memo" data-act="open-memo" data-id="${m.id}">
-      <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || '제목 없음')}</span></div>
+      <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
       <div class="m-body">${esc(m.body)}</div>
       <div class="m-date">${relTime(m.updated)}</div>
     </button>`).join('')}</div>`;
@@ -359,9 +384,9 @@ function planRow(p, showSec) {
   const sd = p.steps?.length ? p.steps.filter((s) => s.done).length : 0;
   return `
     <div class="card plan${p.done ? ' done' : ''}">
-      <button class="check sq${p.done ? ' on' : ''}" data-act="toggle-plan" data-id="${p.id}" aria-label="완료">${svgCheck}</button>
+      <button class="check sq${p.done ? ' on' : ''}" data-act="toggle-plan" data-id="${p.id}" aria-label="Done">${svgCheck}</button>
       <button class="p-main" data-act="open-plan" data-id="${p.id}">
-        <div class="p-title">${esc(p.title || '제목 없음')}</div>
+        <div class="p-title">${esc(p.title || 'Untitled')}</div>
         <div class="p-meta">
           <span class="prio p${p.priority || 0}"></span>
           ${p.due ? `<span class="chip${g === 'overdue' ? ' over' : g === 'today' ? ' today' : ''}">📅 ${dueLabel(p.due)}</span>` : ''}
@@ -384,19 +409,19 @@ function renderPlanSection(sec) {
     <div class="list">${groups[key].map((p) => planRow(p)).join('')}</div>` : '';
   const open = ps.length - groups.done.length;
   return `
-    ${sectionHead(sec, `진행 중 ${open}개 · 완료 ${groups.done.length}개`)}
+    ${sectionHead(sec, `${open} in progress · ${groups.done.length} done`)}
     <form class="card quick-add" data-form="quick-plan" data-sec="${sec.id}">
       <span style="color:var(--ink-3);font-size:18px">＋</span>
-      <input name="title" placeholder="새 계획을 입력하고 Enter" autocomplete="off" />
-      <input name="due" type="date" aria-label="마감일" />
+      <input name="title" placeholder="Add a plan and press Enter" autocomplete="off" />
+      <input name="due" type="date" aria-label="Due date" />
     </form>
-    ${!ps.length ? `<div class="empty" style="margin-top:14px"><div class="e-icon">🎯</div>이루고 싶은 계획을 적어보세요</div>` : ''}
-    ${block('overdue', '⚠️ 기한 지남')}
-    ${block('today', '☀️ 오늘')}
-    ${block('upcoming', '🗓️ 예정')}
-    ${block('nodate', '📋 언젠가')}
+    ${!ps.length ? `<div class="empty" style="margin-top:14px"><div class="e-icon">🎯</div>What do you want to get done?</div>` : ''}
+    ${block('overdue', '⚠️ Overdue')}
+    ${block('today', '☀️ Today')}
+    ${block('upcoming', '🗓️ Upcoming')}
+    ${block('nodate', '📋 Someday')}
     ${groups.done.length ? `<details class="done-group"${view.showDone ? ' open' : ''}>
-      <summary class="section-title">✅ 완료 <span class="count">${groups.done.length}</span><span class="link">펼치기/접기</span></summary>
+      <summary class="section-title">✅ Completed <span class="count">${groups.done.length}</span><span class="link">Show / hide</span></summary>
       <div class="list">${groups.done.map((p) => planRow(p)).join('')}</div></details>` : ''}`;
 }
 
@@ -415,27 +440,27 @@ function snippet(body, q) {
 }
 function renderSearch() {
   return `
-    <div class="page-head"><div class="page-icon">🔍</div><div class="grow"><h1 class="page-title">검색</h1><div class="page-sub">메모 · 계획 · 루틴 전체에서 찾기</div></div></div>
-    <label class="search-box" style="height:46px">🔍<input id="searchInput" placeholder="무엇을 찾고 있나요?" value="${esc(view.q || '')}" autocomplete="off" /></label>
+    <div class="page-head"><div class="page-icon">🔍</div><div class="grow"><h1 class="page-title">Search</h1><div class="page-sub">Across all memos, plans and routines</div></div></div>
+    <label class="search-box" style="height:46px">🔍<input id="searchInput" placeholder="What are you looking for?" value="${esc(view.q || '')}" autocomplete="off" /></label>
     <div id="searchResults">${searchResults(view.q || '')}</div>`;
 }
 function searchResults(q) {
   q = q.trim();
-  if (!q) return `<div class="empty" style="margin-top:18px">검색어를 입력하세요</div>`;
+  if (!q) return `<div class="empty" style="margin-top:18px">Type to search</div>`;
   const lq = q.toLowerCase();
   const ms = S.memos.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(lq)).sort((a, b) => b.updated - a.updated);
   const ps = S.plans.filter((p) => (p.title + ' ' + (p.note || '') + ' ' + (p.steps || []).map((s) => s.text).join(' ')).toLowerCase().includes(lq));
   const rs = S.routines.filter((r) => r.name.toLowerCase().includes(lq));
-  if (!ms.length && !ps.length && !rs.length) return `<div class="empty" style="margin-top:18px">"${esc(q)}"에 대한 결과가 없어요</div>`;
+  if (!ms.length && !ps.length && !rs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
-    ${ms.length ? `<div class="section-title">📝 메모 <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
+    ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
       <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
-        <div class="m-title"><span>${hl(m.title || '제목 없음', q)}</span></div>
+        <div class="m-title"><span>${hl(m.title || 'Untitled', q)}</span></div>
         <div class="m-body" style="-webkit-line-clamp:2">${hl(snippet(m.body, q), q)}</div>
         <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
       </button>`).join('')}</div>` : ''}
-    ${ps.length ? `<div class="section-title">🎯 계획 <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
-    ${rs.length ? `<div class="section-title">🌱 루틴 <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}`;
+    ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
+    ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}`;
 }
 
 /* ── Settings ── */
@@ -443,53 +468,53 @@ const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function renderSettings() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
-  const permText = perm === 'granted' ? '허용됨' : perm === 'denied' ? '차단됨 — 브라우저 설정에서 허용해주세요' : perm === 'unsupported' ? '이 브라우저는 알림을 지원하지 않아요' : '아직 허용하지 않음';
+  const permText = perm === 'granted' ? 'allowed' : perm === 'denied' ? 'blocked — allow it in browser settings' : perm === 'unsupported' ? 'not supported in this browser' : 'not yet allowed';
   return `
-    <div class="page-head"><div class="page-icon">⚙️</div><div class="grow"><h1 class="page-title">설정</h1><div class="page-sub">알림 · 앱 설치 · 백업</div></div></div>
+    <div class="page-head"><div class="page-icon">⚙️</div><div class="grow"><h1 class="page-title">Settings</h1><div class="page-sub">Notifications · Install · Backup</div></div></div>
 
-    <div class="section-title">🔔 알림</div>
+    <div class="section-title">🔔 Notifications</div>
     <div class="card">
       <div class="set-row">
-        <div class="s-text"><div class="s-title">루틴 시간 알림</div><div class="s-desc">루틴에 정한 시간이 되면 알려드려요 · 권한: ${permText}</div></div>
-        <button class="switch${S.settings.notify ? ' on' : ''}" data-act="toggle-notify" aria-label="알림 켜기"></button>
+        <div class="s-text"><div class="s-title">Routine reminders</div><div class="s-desc">Get notified at each routine's time · Permission: ${permText}</div></div>
+        <button class="switch${S.settings.notify ? ' on' : ''}" data-act="toggle-notify" aria-label="Enable notifications"></button>
       </div>
       <div class="set-row">
-        <div class="s-text"><div class="s-title">못 끝낸 루틴 리마인드</div><div class="s-desc">정한 시간에 남은 루틴이 있으면 한 번 더 알려드려요</div></div>
+        <div class="s-text"><div class="s-title">Evening nudge</div><div class="s-desc">A reminder at this time if routines are still open</div></div>
         <input type="time" class="input" style="width:120px" value="${S.settings.remindAt}" data-change="remindAt" ${S.settings.remind ? '' : 'disabled'} />
-        <button class="switch${S.settings.remind ? ' on' : ''}" data-act="toggle-remind" aria-label="리마인드"></button>
+        <button class="switch${S.settings.remind ? ' on' : ''}" data-act="toggle-remind" aria-label="Evening nudge"></button>
       </div>
       <div class="set-row">
-        <div class="s-text"><div class="s-title">테스트 알림 보내기</div><div class="s-desc">알림이 잘 오는지 확인해보세요</div></div>
-        <button class="btn btn-ghost btn-sm" data-act="test-notify">보내기</button>
+        <div class="s-text"><div class="s-title">Send a test notification</div><div class="s-desc">Make sure notifications reach you</div></div>
+        <button class="btn btn-ghost btn-sm" data-act="test-notify">Send</button>
       </div>
     </div>
-    <div class="note">💡 알림은 앱이 열려 있거나 백그라운드에 있을 때 가장 확실하게 와요. 안드로이드 크롬에서 홈 화면에 설치하면 앱을 닫아도 주기적으로 확인해 알려주고, 아이폰은 iOS 16.4 이상에서 <b>홈 화면에 추가한 뒤</b> 그 아이콘으로 열어야 알림을 허용할 수 있어요.</div>
+    <div class="note">💡 Reminders are most reliable while Grove is open or in the background. On Android (Chrome), installing Grove lets it check periodically even when closed. On iPhone (iOS 16.4+), add Grove to your Home Screen and open it from there to allow notifications.</div>
 
-    <div class="section-title">📱 앱으로 설치</div>
+    <div class="section-title">📱 Install app</div>
     <div class="card">
       <div class="set-row">
-        <div class="s-text"><div class="s-title">${isStandalone() ? '앱으로 실행 중이에요 ✅' : '홈 화면에 추가'}</div>
-          <div class="s-desc">${isStandalone() ? '홈 화면 아이콘으로 열려 있어요' : isIOS() ? 'Safari 하단의 공유 버튼 → "홈 화면에 추가"를 눌러주세요' : installEvt ? '버튼을 누르면 바로 설치돼요' : '브라우저 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"'}</div></div>
-        ${!isStandalone() && installEvt ? '<button class="btn btn-primary btn-sm" data-act="install">설치</button>' : ''}
+        <div class="s-text"><div class="s-title">${isStandalone() ? 'Running as an app ✅' : 'Add to Home Screen'}</div>
+          <div class="s-desc">${isStandalone() ? 'Opened from your Home Screen' : isIOS() ? 'In Safari, tap Share → "Add to Home Screen"' : installEvt ? 'Tap the button to install' : 'Browser menu (⋮) → "Install app" or "Add to Home screen"'}</div></div>
+        ${!isStandalone() && installEvt ? '<button class="btn btn-primary btn-sm" data-act="install">Install</button>' : ''}
       </div>
     </div>
 
-    <div class="section-title">💾 백업</div>
+    <div class="section-title">💾 Backup</div>
     <div class="card">
       <div class="set-row">
-        <div class="s-text"><div class="s-title">백업 파일 내보내기</div><div class="s-desc">모든 기록을 .json 파일로 저장해요</div></div>
-        <button class="btn btn-ghost btn-sm" data-act="export">내보내기</button>
+        <div class="s-text"><div class="s-title">Export backup</div><div class="s-desc">Save everything as a .json file</div></div>
+        <button class="btn btn-ghost btn-sm" data-act="export">Export</button>
       </div>
       <div class="set-row">
-        <div class="s-text"><div class="s-title">백업 불러오기</div><div class="s-desc">저장해둔 .json 파일로 복원해요 (현재 기록은 대체돼요)</div></div>
-        <label class="btn btn-ghost btn-sm">불러오기<input type="file" accept="application/json,.json" data-change="import" hidden /></label>
+        <div class="s-text"><div class="s-title">Import backup</div><div class="s-desc">Restore from a .json file (replaces current data)</div></div>
+        <label class="btn btn-ghost btn-sm">Import<input type="file" accept="application/json,.json" data-change="import" hidden /></label>
       </div>
       <div class="set-row">
-        <div class="s-text"><div class="s-title" style="color:var(--danger)">모든 기록 지우기</div><div class="s-desc">처음 상태로 되돌려요. 되돌릴 수 없어요</div></div>
-        <button class="btn btn-danger btn-sm" data-act="reset">초기화</button>
+        <div class="s-text"><div class="s-title" style="color:var(--danger)">Erase everything</div><div class="s-desc">Start fresh. This can't be undone</div></div>
+        <button class="btn btn-danger btn-sm" data-act="reset">Reset</button>
       </div>
     </div>
-    <div class="note">기록은 이 기기의 브라우저 안에만 저장돼요. 기기를 바꾸거나 브라우저 데이터를 지우기 전에 꼭 백업해주세요.</div>`;
+    <div class="note">Your data lives only in this browser on this device. Export a backup before switching devices or clearing browser data.</div>`;
 }
 
 /* ───────── Sheet editors ───────── */
@@ -522,27 +547,27 @@ function openMemo(id) {
   const memoSecs = S.sections.filter((s) => s.type === 'memo');
   openSheet(`
     <div class="sheet-bar">
-      <button class="icon-btn" data-act="close-sheet" aria-label="닫기">${svgBack}</button>
+      <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
       <div class="crumb">${secName(m.sectionId)}</div>
-      <span class="save-state" id="saveState">저장됨</span>
-      <button class="icon-btn" data-act="pin-memo" aria-label="고정" style="color:${m.pinned ? 'var(--g-600)' : 'inherit'}">${svgPin(m.pinned)}</button>
-      <button class="icon-btn" data-act="del-memo" aria-label="삭제">${svgTrash}</button>
+      <span class="save-state" id="saveState">Saved</span>
+      <button class="icon-btn" data-act="pin-memo" aria-label="Pin" style="color:${m.pinned ? 'var(--g-600)' : 'inherit'}">${svgPin(m.pinned)}</button>
+      <button class="icon-btn" data-act="del-memo" aria-label="Delete">${svgTrash}</button>
     </div>
     <div class="sheet-body"><div class="sheet-inner">
-      <input class="title-input" id="mTitle" placeholder="제목" value="${esc(m.title)}" />
+      <input class="title-input" id="mTitle" placeholder="Title" value="${esc(m.title)}" />
       <div class="meta-line">
-        <span>만든 날 ${new Date(m.created).toLocaleDateString('ko-KR')}</span>
+        <span>Created ${MON[new Date(m.created).getMonth()]} ${new Date(m.created).getDate()}, ${new Date(m.created).getFullYear()}</span>
         ${memoSecs.length > 1 ? `<select class="select" id="mSec" style="width:auto;padding:3px 8px;font-size:12.5px;border-radius:8px">${memoSecs.map((s) => `<option value="${s.id}"${s.id === m.sectionId ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select>` : ''}
       </div>
       <div class="fmt-bar">
-        <button data-ins="• ">• 목록</button>
-        <button data-ins="☐ ">☐ 체크</button>
-        <button data-ins="→ ">→ 화살표</button>
-        <button data-ins="time">🕒 지금 시각</button>
-        <button data-ins="tpl-think">💭 생각정리 틀</button>
-        <button data-ins="tpl-pro">⚖️ 장단점 틀</button>
+        <button data-ins="• ">• List</button>
+        <button data-ins="☐ ">☐ Checkbox</button>
+        <button data-ins="→ ">→ Arrow</button>
+        <button data-ins="time">🕒 Time</button>
+        <button data-ins="tpl-think">💭 Reflect</button>
+        <button data-ins="tpl-pro">⚖️ Pros &amp; cons</button>
       </div>
-      <textarea class="body-input" id="mBody" placeholder="자유롭게 생각을 적어보세요…">${esc(m.body)}</textarea>
+      <textarea class="body-input" id="mBody" placeholder="Start writing…">${esc(m.body)}</textarea>
     </div></div>`, {
     type: 'memo', id,
     onClose: () => { if (!m.title.trim() && !m.body.trim()) { S.memos = S.memos.filter((x) => x.id !== id); save(true); } },
@@ -552,8 +577,8 @@ function openMemo(id) {
   let tm;
   const upd = () => {
     m.title = t.value; m.body = b.value; m.updated = Date.now();
-    $('#saveState').textContent = '저장 중…';
-    clearTimeout(tm); tm = setTimeout(() => { save(true); $('#saveState').textContent = '저장됨'; }, 350);
+    $('#saveState').textContent = 'Saving…';
+    clearTimeout(tm); tm = setTimeout(() => { save(true); $('#saveState').textContent = 'Saved'; }, 350);
   };
   t.addEventListener('input', upd);
   b.addEventListener('input', () => { autoGrow(b); upd(); });
@@ -584,8 +609,8 @@ function openMemo(id) {
     const k = btn.dataset.ins;
     const tpl = {
       time: `[${hhmm()}] `,
-      'tpl-think': '■ 지금 떠오르는 생각\n• \n\n■ 왜 그렇게 느낄까?\n• \n\n■ 내가 할 수 있는 것\n☐ \n\n■ 한 줄 정리\n→ ',
-      'tpl-pro': '■ 고민: \n\n👍 장점\n• \n\n👎 단점\n• \n\n✅ 결론\n→ ',
+      'tpl-think': '■ What\'s on my mind\n• \n\n■ Why do I feel this way?\n• \n\n■ What I can do\n☐ \n\n■ In one line\n→ ',
+      'tpl-pro': '■ Decision: \n\n👍 Pros\n• \n\n👎 Cons\n• \n\n✅ Verdict\n→ ',
     }[k];
     const ins = tpl ?? k;
     const pos = b.selectionStart;
@@ -607,35 +632,35 @@ function openPlan(id) {
     $('#planSteps').innerHTML = p.steps.map((s) => `
       <div class="step${s.done ? ' done' : ''}" data-sid="${s.id}">
         <button class="check sq${s.done ? ' on' : ''}" data-step="toggle" style="width:22px;height:22px">${svgCheck}</button>
-        <input type="text" value="${esc(s.text)}" data-step="text" placeholder="단계" />
-        <button class="x" data-step="del" aria-label="삭제">✕</button>
+        <input type="text" value="${esc(s.text)}" data-step="text" placeholder="Step" />
+        <button class="x" data-step="del" aria-label="Delete">✕</button>
       </div>`).join('');
     const d = p.steps.filter((s) => s.done).length;
     $('#stepCount').textContent = p.steps.length ? `${d}/${p.steps.length}` : '';
   };
   openSheet(`
     <div class="sheet-bar">
-      <button class="icon-btn" data-act="close-sheet" aria-label="닫기">${svgBack}</button>
+      <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
       <div class="crumb">${secName(p.sectionId)}</div>
-      <button class="icon-btn" data-act="del-plan" aria-label="삭제">${svgTrash}</button>
+      <button class="icon-btn" data-act="del-plan" aria-label="Delete">${svgTrash}</button>
     </div>
     <div class="sheet-body"><div class="sheet-inner">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
         <button class="check sq${p.done ? ' on' : ''}" id="pDone" style="width:28px;height:28px">${svgCheck}</button>
-        <input class="title-input" id="pTitle" placeholder="계획 이름" value="${esc(p.title)}" />
+        <input class="title-input" id="pTitle" placeholder="Plan name" value="${esc(p.title)}" />
       </div>
       <div class="grid-2" style="gap:0 14px">
-        <div class="field"><label>마감일</label><input type="date" class="input" id="pDue" value="${p.due || ''}" /></div>
-        ${planSecs.length > 1 ? `<div class="field"><label>섹션</label><select class="select" id="pSec">${planSecs.map((s) => `<option value="${s.id}"${s.id === p.sectionId ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : '<div></div>'}
+        <div class="field"><label>Due date</label><input type="date" class="input" id="pDue" value="${p.due || ''}" /></div>
+        ${planSecs.length > 1 ? `<div class="field"><label>Section</label><select class="select" id="pSec">${planSecs.map((s) => `<option value="${s.id}"${s.id === p.sectionId ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : '<div></div>'}
       </div>
-      <div class="field"><span class="field-label">중요도</span>
-        <div class="seg" id="pPrio">${['보통', '중요', '매우 중요'].map((l, i) => `<button data-v="${i}" class="${(p.priority || 0) === i ? 'on' : ''}">${['⚪', '🟡', '🔴'][i]} ${l}</button>`).join('')}</div>
+      <div class="field"><span class="field-label">Priority</span>
+        <div class="seg" id="pPrio">${['Normal', 'High', 'Urgent'].map((l, i) => `<button data-v="${i}" class="${(p.priority || 0) === i ? 'on' : ''}">${['⚪', '🟡', '🔴'][i]} ${l}</button>`).join('')}</div>
       </div>
-      <div class="field"><span class="field-label">세부 단계 <span id="stepCount" style="color:var(--ink-3);font-weight:500"></span></span>
+      <div class="field"><span class="field-label">Steps <span id="stepCount" style="color:var(--ink-3);font-weight:500"></span></span>
         <div class="steps" id="planSteps"></div>
-        <form id="stepForm" style="display:flex;gap:8px;margin-top:6px"><input class="input" id="stepIn" placeholder="+ 단계 추가 (Enter)" autocomplete="off" /><button class="btn btn-ghost" type="submit">추가</button></form>
+        <form id="stepForm" style="display:flex;gap:8px;margin-top:6px"><input class="input" id="stepIn" placeholder="+ Add a step (Enter)" autocomplete="off" /><button class="btn btn-ghost" type="submit">Add</button></form>
       </div>
-      <div class="field"><label>메모</label><textarea class="textarea" id="pNote" placeholder="필요한 내용, 아이디어, 링크 등">${esc(p.note || '')}</textarea></div>
+      <div class="field"><label>Notes</label><textarea class="textarea" id="pNote" placeholder="Details, ideas, links…">${esc(p.note || '')}</textarea></div>
     </div></div>`, {
     type: 'plan', id,
     onClose: () => { if (!p.title.trim() && !p.note && !p.steps.length) S.plans = S.plans.filter((x) => x.id !== id); save(true); },
@@ -672,11 +697,11 @@ function closeModal(val) {
   if (modalResolve) { const r = modalResolve; modalResolve = null; r(val); }
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(false); });
-function ask(title, desc, ok = '확인', danger) {
+function ask(title, desc, ok = 'OK', danger) {
   return new Promise((res) => {
     modalResolve = res;
     openModal(`<h3>${title}</h3><p class="desc">${desc}</p>
-      <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">취소</button>
+      <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button>
       <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-act="modal-yes">${ok}</button></div>`);
   });
 }
@@ -685,26 +710,26 @@ function sectionModal(id) {
   const sec = id ? S.sections.find((s) => s.id === id) : null;
   const st = { icon: sec?.icon || '📚', type: sec?.type || 'memo' };
   openModal(`
-    <h3>${sec ? '섹션 편집' : '새 섹션 만들기'}</h3>
-    <p class="desc">${sec ? '이름과 아이콘을 바꿀 수 있어요' : '기록을 나눠 담을 공간을 만들어요'}</p>
-    <div class="field"><label>이름</label><input class="input" id="secName" maxlength="30" placeholder="예: 독서 노트, 운동, 회사 업무" value="${esc(sec?.name || '')}" /></div>
-    ${sec ? '' : `<div class="field"><span class="field-label">종류</span><div class="type-cards" id="secType">
+    <h3>${sec ? 'Edit section' : 'New section'}</h3>
+    <p class="desc">${sec ? 'Rename it or pick a new icon' : 'A space to keep things organized'}</p>
+    <div class="field"><label>Name</label><input class="input" id="secName" maxlength="30" placeholder="e.g. Reading, Workout, Work" value="${esc(sec?.name || '')}" /></div>
+    ${sec ? '' : `<div class="field"><span class="field-label">Type</span><div class="type-cards" id="secType">
       ${Object.entries(TYPES).map(([k, t]) => `<button class="type-card${k === st.type ? ' on' : ''}" data-v="${k}"><span class="t-ic">${t.icon}</span><div><b>${t.label}</b>${t.desc}</div></button>`).join('')}
     </div></div>`}
-    <div class="field"><span class="field-label">아이콘</span><div class="emoji-grid" id="secIcon">
+    <div class="field"><span class="field-label">Icon</span><div class="emoji-grid" id="secIcon">
       ${ICONS.map((i) => `<button data-v="${i}" class="${i === st.icon ? 'on' : ''}">${i}</button>`).join('')}
     </div></div>
     <div class="modal-actions">
-      ${sec ? `<button class="btn btn-danger left" data-act="del-section" data-id="${sec.id}">삭제</button>` : ''}
-      ${sec ? `<button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="-1" aria-label="위로">↑</button><button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="1" aria-label="아래로">↓</button>` : ''}
-      <button class="btn btn-ghost" data-act="modal-no">취소</button>
-      <button class="btn btn-primary" id="secSave">${sec ? '저장' : '만들기'}</button>
+      ${sec ? `<button class="btn btn-danger left" data-act="del-section" data-id="${sec.id}">Delete</button>` : ''}
+      ${sec ? `<button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="-1" aria-label="Move up">↑</button><button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="1" aria-label="Move down">↓</button>` : ''}
+      <button class="btn btn-ghost" data-act="modal-no">Cancel</button>
+      <button class="btn btn-primary" id="secSave">${sec ? 'Save' : 'Create'}</button>
     </div>`);
   $('#secType')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.type = b.dataset.v; $$('#secType button').forEach((x) => x.classList.toggle('on', x === b)); if (!$('#secName').value) { st.icon = TYPES[st.type].icon; $$('#secIcon button').forEach((x) => x.classList.toggle('on', x.dataset.v === st.icon)); } });
   $('#secIcon').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.icon = b.dataset.v; $$('#secIcon button').forEach((x) => x.classList.toggle('on', x === b)); });
   const submit = () => {
     const name = $('#secName').value.trim();
-    if (!name) { $('#secName').focus(); return toast('이름을 입력해주세요'); }
+    if (!name) { $('#secName').focus(); return toast('Please enter a name'); }
     if (sec) { sec.name = name; sec.icon = st.icon; save(); closeModal(); render(); }
     else {
       const ns = { id: uid(), name, icon: st.icon, type: st.type, created: Date.now() };
@@ -721,20 +746,20 @@ function routineModal(id, secId) {
   const st = { icon: r?.icon || '🌿', days: r ? [...r.days] : [0, 1, 2, 3, 4, 5, 6] };
   const routineSecs = S.sections.filter((s) => s.type === 'routine');
   openModal(`
-    <h3>${r ? '루틴 편집' : '새 루틴'}</h3>
-    <p class="desc">매일 또는 정한 요일마다 체크할 습관이에요</p>
-    <div class="field"><label>이름</label><input class="input" id="rName" maxlength="40" placeholder="예: 스트레칭 10분" value="${esc(r?.name || '')}" /></div>
-    <div class="field"><span class="field-label">아이콘</span><div class="emoji-grid" id="rIcon">${ICONS.map((i) => `<button data-v="${i}" class="${i === st.icon ? 'on' : ''}">${i}</button>`).join('')}</div></div>
-    <div class="field"><span class="field-label">반복 요일</span>
-      <div class="days" id="rDays">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-v="${d}" class="${st.days.includes(d) ? 'on' : ''}">${WD[d]}</button>`).join('')}</div>
-      <div class="seg" style="margin-top:8px" id="rPreset"><button data-p="all">매일</button><button data-p="wk">평일</button><button data-p="we">주말</button></div>
+    <h3>${r ? 'Edit routine' : 'New routine'}</h3>
+    <p class="desc">A habit you check off on chosen days</p>
+    <div class="field"><label>Name</label><input class="input" id="rName" maxlength="40" placeholder="e.g. Stretch for 10 min" value="${esc(r?.name || '')}" /></div>
+    <div class="field"><span class="field-label">Icon</span><div class="emoji-grid" id="rIcon">${ICONS.map((i) => `<button data-v="${i}" class="${i === st.icon ? 'on' : ''}">${i}</button>`).join('')}</div></div>
+    <div class="field"><span class="field-label">Repeat on</span>
+      <div class="days" id="rDays">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-v="${d}" class="${st.days.includes(d) ? 'on' : ''}">${WD2[d]}</button>`).join('')}</div>
+      <div class="seg" style="margin-top:8px" id="rPreset"><button data-p="all">Every day</button><button data-p="wk">Weekdays</button><button data-p="we">Weekends</button></div>
     </div>
-    <div class="field"><label>알림 시간 (선택)</label><input type="time" class="input" id="rTime" value="${r?.time || ''}" /></div>
-    ${routineSecs.length > 1 ? `<div class="field"><label>섹션</label><select class="select" id="rSec">${routineSecs.map((s) => `<option value="${s.id}"${s.id === (r?.sectionId || secId) ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : ''}
+    <div class="field"><label>Reminder time (optional)</label><input type="time" class="input" id="rTime" value="${r?.time || ''}" /></div>
+    ${routineSecs.length > 1 ? `<div class="field"><label>Section</label><select class="select" id="rSec">${routineSecs.map((s) => `<option value="${s.id}"${s.id === (r?.sectionId || secId) ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : ''}
     <div class="modal-actions">
-      ${r ? `<button class="btn btn-danger left" data-act="del-routine" data-id="${r.id}">삭제</button>` : ''}
-      <button class="btn btn-ghost" data-act="modal-no">취소</button>
-      <button class="btn btn-primary" id="rSave">${r ? '저장' : '추가'}</button>
+      ${r ? `<button class="btn btn-danger left" data-act="del-routine" data-id="${r.id}">Delete</button>` : ''}
+      <button class="btn btn-ghost" data-act="modal-no">Cancel</button>
+      <button class="btn btn-primary" id="rSave">${r ? 'Save' : 'Add'}</button>
     </div>`);
   const drawDays = () => $$('#rDays button').forEach((b) => b.classList.toggle('on', st.days.includes(+b.dataset.v)));
   $('#rIcon').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.icon = b.dataset.v; $$('#rIcon button').forEach((x) => x.classList.toggle('on', x === b)); });
@@ -742,14 +767,14 @@ function routineModal(id, secId) {
   $('#rPreset').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.days = { all: [0, 1, 2, 3, 4, 5, 6], wk: [1, 2, 3, 4, 5], we: [0, 6] }[b.dataset.p]; drawDays(); });
   const submit = () => {
     const name = $('#rName').value.trim();
-    if (!name) { $('#rName').focus(); return toast('이름을 입력해주세요'); }
-    if (!st.days.length) return toast('요일을 하나 이상 골라주세요');
+    if (!name) { $('#rName').focus(); return toast('Please enter a name'); }
+    if (!st.days.length) return toast('Pick at least one day');
     const time = $('#rTime').value;
     const sectionId = $('#rSec')?.value || r?.sectionId || secId;
     if (r) Object.assign(r, { name, icon: st.icon, days: st.days, time, sectionId });
     else S.routines.push({ id: uid(), sectionId, name, icon: st.icon, days: st.days, time, created: Date.now() });
     save(); closeModal(); render();
-    if (time && !S.settings.notify) toast('설정에서 알림을 켜면 시간에 맞춰 알려드려요');
+    if (time && !S.settings.notify) toast('Turn on notifications in Settings to get reminders');
   };
   $('#rSave').addEventListener('click', submit);
   $('#rName').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
@@ -764,7 +789,7 @@ function newMemo(secId, body = '') {
 }
 function quickNewMemo() {
   let sec = S.sections.find((s) => s.type === 'memo');
-  if (!sec) { sec = { id: uid(), name: '메모', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
+  if (!sec) { sec = { id: uid(), name: 'Memo', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
   history.replaceState(null, '', `#s-${sec.id}`);
   view = { name: 'section', id: sec.id }; render();
   openMemo(newMemo(sec.id).id);
@@ -785,12 +810,12 @@ const actions = {
     const sec = S.sections.find((s) => s.id === el.dataset.id);
     closeModal();
     const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length;
-    if (!(await ask('섹션을 삭제할까요?', `"${esc(sec.name)}" 섹션${n ? `과 안에 있는 ${n}개의 기록이` : '이'} 모두 사라져요.`, '삭제', true))) return;
+    if (!(await ask('Delete this section?', `"${esc(sec.name)}"${n ? ` and its ${n} item${n === 1 ? '' : 's'}` : ''} will be removed.`, 'Delete', true))) return;
     S.sections = S.sections.filter((s) => s.id !== sec.id);
     S.memos = S.memos.filter((m) => m.sectionId !== sec.id);
     S.plans = S.plans.filter((p) => p.sectionId !== sec.id);
     S.routines = S.routines.filter((r) => r.sectionId !== sec.id);
-    save(); toast('섹션을 삭제했어요'); go('#today');
+    save(); toast('Section deleted'); go('#today');
   },
   'modal-yes': () => closeModal(true),
   'modal-no': () => closeModal(false),
@@ -800,24 +825,24 @@ const actions = {
   'pin-memo': (el) => {
     const m = S.memos.find((x) => x.id === sheetCtx.id); m.pinned = !m.pinned; save(true);
     el.innerHTML = svgPin(m.pinned); el.style.color = m.pinned ? 'var(--g-600)' : 'inherit';
-    toast(m.pinned ? '맨 위에 고정했어요' : '고정을 풀었어요');
+    toast(m.pinned ? 'Pinned to top' : 'Unpinned');
   },
   'del-memo': async () => {
     const id = sheetCtx.id;
-    if (!(await ask('메모를 삭제할까요?', '삭제한 메모는 되돌릴 수 없어요.', '삭제', true))) return;
-    S.memos = S.memos.filter((m) => m.id !== id); save(true); closeSheet(); toast('메모를 삭제했어요');
+    if (!(await ask('Delete this memo?', 'This can\'t be undone.', 'Delete', true))) return;
+    S.memos = S.memos.filter((m) => m.id !== id); save(true); closeSheet(); toast('Memo deleted');
   },
   'close-sheet': () => closeSheet(),
 
   'open-plan': (el) => openPlan(el.dataset.id),
   'toggle-plan': (el) => {
     const p = S.plans.find((x) => x.id === el.dataset.id); p.done = !p.done; p.doneAt = p.done ? Date.now() : 0;
-    save(); if (p.done) toast('완료! 잘했어요 👏'); render();
+    save(); if (p.done) toast('Done — nice work 👏'); render();
   },
   'del-plan': async () => {
     const id = sheetCtx.id;
-    if (!(await ask('계획을 삭제할까요?', '세부 단계와 메모도 함께 사라져요.', '삭제', true))) return;
-    S.plans = S.plans.filter((p) => p.id !== id); save(true); closeSheet(); toast('계획을 삭제했어요');
+    if (!(await ask('Delete this plan?', 'Its steps and notes will be removed too.', 'Delete', true))) return;
+    S.plans = S.plans.filter((p) => p.id !== id); save(true); closeSheet(); toast('Plan deleted');
   },
 
   'new-routine': (el) => routineModal(null, el.dataset.sec),
@@ -826,7 +851,7 @@ const actions = {
     const on = toggleCheck(el.dataset.id);
     if (on) {
       const rs = todayRoutines();
-      if (rs.length && rs.every((r) => isChecked(r.id))) toast('오늘 루틴 완주! 🎉');
+      if (rs.length && rs.every((r) => isChecked(r.id))) toast('All routines done today! 🎉');
       if (navigator.vibrate) try { navigator.vibrate(12); } catch (_) {}
     }
     render();
@@ -834,42 +859,42 @@ const actions = {
   },
   'del-routine': async (el) => {
     const id = el.dataset.id; closeModal();
-    if (!(await ask('루틴을 삭제할까요?', '체크 기록도 함께 사라져요.', '삭제', true))) return;
+    if (!(await ask('Delete this routine?', 'Its check-in history will be removed too.', 'Delete', true))) return;
     S.routines = S.routines.filter((r) => r.id !== id);
     Object.keys(S.checks).forEach((k) => { S.checks[k] = S.checks[k].filter((x) => x !== id); if (!S.checks[k].length) delete S.checks[k]; });
-    save(); render(); toast('루틴을 삭제했어요');
+    save(); render(); toast('Routine deleted');
   },
 
   'toggle-notify': async () => {
     if (S.settings.notify) { S.settings.notify = false; save(); render(); return; }
-    if (!('Notification' in window)) return toast(isIOS() ? '홈 화면에 추가한 앱에서 켜주세요' : '이 브라우저는 알림을 지원하지 않아요');
+    if (!('Notification' in window)) return toast(isIOS() ? 'Open Grove from your Home Screen to enable this' : 'This browser doesn\'t support notifications');
     let p = Notification.permission;
     if (p === 'default') p = await Notification.requestPermission();
-    if (p !== 'granted') { render(); return toast('알림 권한이 필요해요'); }
+    if (p !== 'granted') { render(); return toast('Notification permission is needed'); }
     S.settings.notify = true; save(); render(); registerPeriodic();
-    toast('루틴 알림을 켰어요 🔔');
+    toast('Routine reminders on 🔔');
   },
   'toggle-remind': () => { S.settings.remind = !S.settings.remind; save(); render(); },
   'test-notify': async () => {
-    if (!('Notification' in window)) return toast('이 브라우저는 알림을 지원하지 않아요');
+    if (!('Notification' in window)) return toast('This browser doesn\'t support notifications');
     let p = Notification.permission;
     if (p === 'default') p = await Notification.requestPermission();
-    if (p !== 'granted') return toast('알림 권한이 필요해요');
-    await notify('🌿 나의 숲', '알림이 잘 도착했어요!', 'test');
+    if (p !== 'granted') return toast('Notification permission is needed');
+    await notify('🌿 Grove', 'Notifications are working!', 'test');
     render();
   },
   install: async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); },
   export: () => {
     const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `나의숲-백업-${dkey()}.json`;
+    a.href = URL.createObjectURL(blob); a.download = `grove-backup-${dkey()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast('백업 파일을 저장했어요');
+    toast('Backup saved');
   },
   reset: async () => {
-    if (!(await ask('모든 기록을 지울까요?', '메모, 계획, 루틴과 체크 기록이 전부 사라지고 처음 상태로 돌아가요.', '모두 지우기', true))) return;
-    S = seed(); save(); toast('초기화했어요'); go('#today');
+    if (!(await ask('Erase everything?', 'All memos, plans, routines and check-ins will be deleted.', 'Erase all', true))) return;
+    S = seed(); save(); toast('Reset complete'); go('#today');
   },
 };
 function closeDrawer() { $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('open'); }
@@ -886,10 +911,10 @@ document.addEventListener('submit', (e) => {
   if (f.dataset.form === 'quick-memo') {
     const v = f.q.value.trim(); if (!v) return;
     let sec = S.sections.find((s) => s.type === 'memo');
-    if (!sec) { sec = { id: uid(), name: '메모', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
+    if (!sec) { sec = { id: uid(), name: 'Memo', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
     const [first, ...rest] = v.split('\n');
     const m = newMemo(sec.id); m.title = first.slice(0, 60); m.body = rest.join('\n'); save();
-    f.q.value = ''; toast(`${sec.icon} ${sec.name}에 기록했어요`); render();
+    f.q.value = ''; toast(`Saved to ${sec.icon} ${sec.name}`); render();
   }
   if (f.dataset.form === 'quick-plan') {
     const v = f.title.value.trim(); if (!v) return;
@@ -916,9 +941,9 @@ document.addEventListener('change', async (e) => {
     try {
       const data = JSON.parse(await file.text());
       if (!Array.isArray(data.sections)) throw new Error('bad');
-      if (!(await ask('백업을 불러올까요?', `섹션 ${data.sections.length}개, 메모 ${(data.memos || []).length}개, 계획 ${(data.plans || []).length}개, 루틴 ${(data.routines || []).length}개를 불러와요. 지금 기록은 대체돼요.`, '불러오기'))) return;
-      S = normalize(data); save(); toast('백업을 불러왔어요'); go('#today');
-    } catch (_) { toast('올바른 백업 파일이 아니에요'); }
+      if (!(await ask('Restore this backup?', `${data.sections.length} sections, ${(data.memos || []).length} memos, ${(data.plans || []).length} plans and ${(data.routines || []).length} routines will replace your current data.`, 'Restore'))) return;
+      S = normalize(data); save(); toast('Backup restored'); go('#today');
+    } catch (_) { toast('That doesn\'t look like a Grove backup'); }
     e.target.value = '';
   }
 });
@@ -950,14 +975,14 @@ function tick() {
   for (const r of todayRoutines()) {
     if (!r.time || isChecked(r.id) || n.ids.includes(r.id)) continue;
     const diff = nowMin - toMin(r.time);
-    if (diff >= 0 && diff <= 15) { notify(`${r.icon || '🌱'} ${r.name}`, `${r.time} · 루틴할 시간이에요!`, `r-${r.id}-${today}`); n.ids.push(r.id); changed = true; }
+    if (diff >= 0 && diff <= 15) { notify(`${r.icon || '🌱'} ${r.name}`, `${r.time} · Time for your routine`, `r-${r.id}-${today}`); n.ids.push(r.id); changed = true; }
     else if (diff > 15) { n.ids.push(r.id); changed = true; }
   }
   if (S.settings.remind && !n.reminded && S.settings.remindAt) {
     const diff = nowMin - toMin(S.settings.remindAt);
     if (diff >= 0) {
       const left = todayRoutines().filter((r) => !isChecked(r.id));
-      if (left.length && diff <= 30) notify('🌙 오늘의 루틴', `${left.length}개 남았어요: ${left.slice(0, 3).map((r) => r.name).join(', ')}${left.length > 3 ? ' …' : ''}`, `remind-${today}`);
+      if (left.length && diff <= 30) notify('🌙 Today\'s routines', `${left.length} left: ${left.slice(0, 3).map((r) => r.name).join(', ')}${left.length > 3 ? ' …' : ''}`, `remind-${today}`);
       n.reminded = true; changed = true;
     }
   }
@@ -999,12 +1024,12 @@ async function registerPeriodic() {
 /* ───────── PWA ───────── */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then(() => { if (S.settings.notify) registerPeriodic(); }).catch((e) => console.warn('SW 등록 실패', e));
+    navigator.serviceWorker.register('sw.js').then(() => { if (S.settings.notify) registerPeriodic(); }).catch((e) => console.warn('SW registration failed', e));
   });
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.type === 'goto') go(e.data.hash || '#today'); });
 }
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; if (view.name === 'settings') render(); });
-window.addEventListener('appinstalled', () => { installEvt = null; toast('홈 화면에 설치했어요 🌿'); });
+window.addEventListener('appinstalled', () => { installEvt = null; toast('Grove installed 🌿'); });
 
 /* refresh when day changes or app comes back */
 let lastDay = dkey();

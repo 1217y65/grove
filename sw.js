@@ -1,5 +1,5 @@
-/* 나의 숲 — Service Worker */
-const VERSION = 'grove-v1.0.1';
+/* Grove — Service Worker */
+const VERSION = 'grove-v1.1.0';
 const SHELL = [
   './',
   './index.html',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   const sameOrigin = url.origin === self.location.origin;
-  const isFont = url.hostname === 'cdn.jsdelivr.net';
+  const isFont = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname);
   if (!sameOrigin && !isFont) return;
 
   e.respondWith(
@@ -116,7 +116,7 @@ async function checkRoutines() {
     const diff = nowMin - toMin(r.time);
     if (diff >= 0 && diff <= 60) {
       await self.registration.showNotification(`${r.icon || '🌱'} ${r.name}`, {
-        body: `${r.time} · 루틴할 시간이에요!`, tag: `r-${r.id}-${today}`,
+        body: `${r.time} · Time for your routine`, tag: `r-${r.id}-${today}`,
         icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
       });
       sent.ids.push(r.id);
@@ -127,8 +127,8 @@ async function checkRoutines() {
     if (diff >= 0 && diff <= 90) {
       const left = todays.filter((r) => !done.includes(r.id));
       if (left.length) {
-        await self.registration.showNotification('🌙 오늘의 루틴', {
-          body: `${left.length}개 남았어요: ${left.slice(0, 3).map((r) => r.name).join(', ')}`,
+        await self.registration.showNotification('🌙 Today\'s routines', {
+          body: `${left.length} left: ${left.slice(0, 3).map((r) => r.name).join(', ')}`,
           tag: `remind-${today}`, icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
         });
       }
@@ -146,7 +146,7 @@ self.addEventListener('periodicsync', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || '🌿 나의 숲', {
-    body: d.body || '오늘의 루틴을 확인해보세요', icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
+  e.waitUntil(self.registration.showNotification(d.title || '🌿 Grove', {
+    body: d.body || 'Check today\'s routines', icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
   }));
 });

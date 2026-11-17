@@ -1,8 +1,8 @@
 {
-  "name": "나의 숲 — 기록장",
-  "short_name": "나의 숲",
-  "description": "생각 정리, 메모, 계획, 매일 루틴을 섹션별로 기록하는 나만의 공간",
-  "lang": "ko",
+  "name": "Grove",
+  "short_name": "Grove",
+  "description": "Memos, plans and daily routines — your quiet place to grow.",
+  "lang": "en",
   "start_url": "./#today",
   "scope": "./",
   "display": "standalone",
@@ -15,7 +15,7 @@
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "오늘", "short_name": "오늘", "url": "./#today", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "새 메모", "short_name": "새 메모", "url": "./#new-memo", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Today", "short_name": "Today", "url": "./#today", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "New memo", "short_name": "New memo", "url": "./#new-memo", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }
