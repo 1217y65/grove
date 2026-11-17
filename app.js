@@ -65,6 +65,7 @@ function seed() {
   const now = Date.now();
   return {
     v: 4,
+    _pristine: true,
     sections: [memo, plan, routine, inspo, faith],
     faith: [],
     inspos: [
@@ -91,10 +92,15 @@ function seed() {
 }
 
 function load() {
+  let raw = null;
   try {
-    const raw = localStorage.getItem(KEY);
+    raw = localStorage.getItem(KEY);
     if (raw) return normalize(JSON.parse(raw));
-  } catch (e) { console.warn(e); }
+  } catch (e) {
+    console.warn(e);
+    // keep the unreadable copy instead of overwriting it with a fresh start
+    try { if (raw) localStorage.setItem(`${KEY}-rescue-${Date.now()}`, raw); } catch (_) {}
+  }
   return seed();
 }
 function normalize(d) {
@@ -808,8 +814,8 @@ function renderSettings() {
     <div class="section-title">☁️ Sync</div>
     <div class="card">
       <div class="set-row">
-        <div class="s-text"><div class="s-title">Sync across devices</div><div class="s-desc" id="syncStatus">${syncStatusText()}</div></div>
-        ${SY ? '<button class="btn btn-ghost btn-sm" data-act="sync-now">Sync now</button>' : '<button class="btn btn-primary btn-sm" data-act="sync-setup">Set up</button>'}
+        <div class="s-text"><div class="s-title">${SY ? 'Cloud · signed in' : 'Cloud sync'}</div><div class="s-desc" id="syncStatus">${syncStatusText()}</div></div>
+        ${SY ? '<button class="btn btn-ghost btn-sm" data-act="sync-now">Sync now</button>' : '<button class="btn btn-primary btn-sm" data-act="sync-setup">Sign in</button>'}
       </div>
       ${SY ? `<div class="set-row">
         <div class="s-text"><div class="s-title">Turn off sync on this device</div><div class="s-desc">Your records stay here and in the cloud</div></div>
@@ -1491,7 +1497,7 @@ const actions = {
     S.settings.notify = true; save(); render(); registerPeriodic();
     toast('Routine reminders on 🔔');
   },
-  'sync-setup': () => syncModal(),
+  'sync-setup': () => { try { localStorage.removeItem('grove-gate-skip'); } catch (_) {} showGate(); },
   'sync-now': () => { syncNow(); },
   'sync-off': async () => {
     if (!(await ask('Turn off sync here?', 'This device stops syncing. Your records stay on this device and in the cloud; enter the same phrase again any time to reconnect.', 'Turn off'))) return;
@@ -1649,7 +1655,7 @@ function stampChanges() {
   for (const k of ck) if (!seenCk.has(k)) { S._ck[k] = now; changed = true; }
   for (const k of seenCk) if (!ck.has(k)) { S._ck[k] = -now; changed = true; }
   seenCk = ck;
-  if (changed) S._at = now;
+  if (changed) { S._at = now; delete S._pristine; }
   return changed;
 }
 
@@ -1739,6 +1745,16 @@ async function syncNow() {
       let remote;
       try { remote = JSON.parse(new TextDecoder().decode(await unseal(await r.arrayBuffer()))); } catch (_) { throw new Error('wrong-phrase'); }
       stampChanges();
+      if (S._pristine) {
+        // nothing was ever written on this device — take the cloud copy as is
+        const settings = S.settings;
+        S = normalize(remote); S.settings = settings; initStamps();
+        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
+        if (!$('#sheet').classList.contains('open') && !$('#modal').classList.contains('open')) render(); else renderSidebar();
+        SY.fresh = false;
+        await syncImages(); SY.last = Date.now(); SY.err = '';
+        return;
+      }
       if (SY.fresh) {
         // a device joining existing data: drop its untouched starter samples so they don't come back
         const untouched = (it) => SAMPLE_TITLES.has(it.title || it.name || it.text || '') && !(it.updated && it.updated !== it.created);
@@ -1763,7 +1779,7 @@ async function syncNow() {
   } catch (e) {
     SY.err = e.message || String(e);
   } finally {
-    syncBusy = false; saveSY(); setSyncStatus(SY?.err ? 'error' : 'ok');
+    syncBusy = false; pushTimer = null; saveSY(); setSyncStatus(SY?.err ? 'error' : 'ok');
     if (syncAgain && SY) { syncAgain = false; setTimeout(syncNow, 800); }
   }
 }
@@ -1784,7 +1800,9 @@ async function syncImages() {
     }
   }
 }
-function schedulePush() { if (!SY) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncNow, 2500); }
+function schedulePush() { if (!SY) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncNow, 1000); }
+document.addEventListener('visibilitychange', () => { if (document.hidden && SY && pushTimer) { clearTimeout(pushTimer); pushTimer = null; syncNow(); } });
+window.addEventListener('pagehide', () => { if (SY && pushTimer) { clearTimeout(pushTimer); pushTimer = null; syncNow(); } });
 
 function syncModal() {
   openModal(`
@@ -1811,6 +1829,56 @@ function syncModal() {
       render();
     } catch (e) { btn.disabled = false; btn.textContent = 'Connect'; toast('Couldn\'t connect — try again'); }
   });
+}
+
+/* ───────── Sign-in gate: one Grove password opens the same space everywhere ───────── */
+function showGate() {
+  let el = $('#gate');
+  if (!el) { el = document.createElement('div'); el.id = 'gate'; document.body.appendChild(el); }
+  document.body.classList.add('gated');
+  el.innerHTML = `
+    <form class="gate-inner" id="gateForm" autocomplete="on">
+      <div class="brand-mark lock-mark">${svgLeaf}</div>
+      <div class="lock-title">Grove</div>
+      <div class="gate-sub">Enter your Grove password.<br/>Use the same one on your Mac, iPhone and any browser — everything is saved to your cloud.</div>
+      <input type="text" name="username" value="grove" autocomplete="username" hidden />
+      <input class="gate-in" id="gatePass" name="password" type="password" autocomplete="current-password" placeholder="Grove password" />
+      <button class="gate-btn" id="gateGo" type="submit">Open Grove</button>
+      <div class="gate-msg" id="gateMsg"></div>
+      <button type="button" class="gate-skip" id="gateSkip">Not now — use only on this device</button>
+    </form>`;
+  setTimeout(() => $('#gatePass')?.focus(), 100);
+  $('#gateSkip').onclick = () => hideGate(true);
+  $('#gateForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const pass = $('#gatePass').value; const msg = $('#gateMsg'); const btn = $('#gateGo');
+    if (pass.length < 8) { msg.textContent = 'Your Grove password has at least 8 characters'; return; }
+    btn.disabled = true; btn.textContent = 'Opening…'; msg.textContent = '';
+    try {
+      const ping = await fetch('/api/sync?ping=1', { cache: 'no-store' }).then((r) => r.json()).catch(() => null);
+      if (!ping?.ready) throw new Error('offline');
+      const keys = await syncDerive(pass);
+      const head = await fetch(`/api/sync?id=${keys.id}`, { cache: 'no-store' });
+      if (head.status === 404) {
+        btn.disabled = false; btn.textContent = 'Open Grove';
+        const ok = await ask('No Grove found for this password', 'Check for a typo. If this is your first time, create a new Grove with this password — then use exactly the same password on your other devices.', 'Create new Grove');
+        if (!ok) { $('#gatePass').focus(); return; }
+      } else if (!head.ok) throw new Error(`HTTP ${head.status}`);
+      SY = { ...keys, imgs: [], last: 0, err: '', fresh: true }; syncCK = null; saveSY();
+      await syncNow();
+      if (SY?.err) throw new Error(SY.err);
+      hideGate(); toast('Welcome back 🌿');
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Open Grove';
+      msg.textContent = err.message === 'offline' ? 'Can\'t reach the cloud — check your connection' : `Couldn't open (${err.message})`;
+    }
+  };
+}
+function hideGate(skipped) {
+  if (skipped) { try { localStorage.setItem('grove-gate-skip', '1'); } catch (_) {} }
+  document.body.classList.remove('gated');
+  const el = $('#gate'); if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 250); }
+  render();
 }
 
 /* ───────── App lock (PIN) ───────── */
@@ -2019,6 +2087,8 @@ if (SY) setTimeout(syncNow, 600);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
 window.addEventListener('online', () => syncNow());
 setInterval(() => { if (!document.hidden) syncNow(); }, 120000);
+try { navigator.storage?.persist?.(); } catch (_) {}
+if (!SY && !localStorage.getItem('grove-gate-skip')) showGate();
 if (lockOn()) showLock();
 if (location.hash === '#new-memo') { render(); quickNewMemo(); }
 else { view = parseHash(); render(); }
