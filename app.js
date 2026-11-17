@@ -19,11 +19,23 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 const KEY = 'grove-data-v1';
-const ICONS = ['💭', '📝', '🎯', '🌱', '📚', '💡', '✏️', '📅', '🗂️', '🧠', '💼', '🏃', '🧘', '💧', '🍎', '💤', '🎵', '🎨', '✈️', '🏠', '💰', '❤️', '🙏', '⭐', '🔥', '🌿', '☕', '🧪', '📖', '🛒', '🎁', '📌'];
+const ICONS = ['📝', '🎯', '🌱', '✨', '💭', '💡', '📚', '📖', '🎓', '🏫', '✏️', '🧪', '🧠', '💼', '💻', '📅', '🗂️', '📌', '🏃', '🧘', '💪', '💧', '🍎', '💤', '🎵', '🎬', '🎨', '📷', '✈️', '🏠', '💰', '🛒', '❤️', '🙏', '⭐', '🔥', '🌿', '🌸', '☕', '🎁', '🐶', '🌙'];
 const TYPES = {
   memo: { icon: '📝', label: 'Memo', desc: 'Notes · Thoughts' },
   plan: { icon: '🎯', label: 'Plan', desc: 'Tasks · Goals' },
   routine: { icon: '🌱', label: 'Routine', desc: 'Daily habits' },
+  inspo: { icon: '✨', label: 'Inspiration', desc: 'Films · Books · Quotes' },
+};
+const KINDS = {
+  film: { icon: '🎬', label: 'Film', who: 'Director', title: 'Title' },
+  book: { icon: '📚', label: 'Book', who: 'Author', title: 'Title' },
+  quote: { icon: '💬', label: 'Quote', who: 'Said by', title: 'Source' },
+  music: { icon: '🎵', label: 'Music', who: 'Artist', title: 'Title' },
+  other: { icon: '✨', label: 'Other', who: 'By', title: 'Title' },
+};
+const firstGrapheme = (str) => {
+  str = (str || '').trim(); if (!str) return '';
+  try { return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(str)][0].segment; } catch (_) { return [...str][0]; }
 };
 
 const svgCheck = '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -43,15 +55,19 @@ function seed() {
   const memo = s('Memo', '📝', 'memo');
   const plan = s('Plan', '🎯', 'plan');
   const routine = s('Routine', '🌱', 'routine');
+  const inspo = s('Inspiration', '✨', 'inspo');
   const now = Date.now();
   return {
-    v: 2,
-    sections: [memo, plan, routine],
+    v: 3,
+    sections: [memo, plan, routine, inspo],
+    inspos: [
+      { id: uid(), sectionId: inspo.id, kind: 'quote', text: 'The best time to plant a tree was 20 years ago. The second best time is now.', title: '', who: 'Proverb', note: '', rating: 0, date: dkey(), created: now, updated: now },
+    ],
     memos: [
       {
         id: uid(), sectionId: memo.id, pinned: true, created: now, updated: now,
         title: 'Welcome to Grove 🌿',
-        body: '• Use "+ New section" in the sidebar to add as many spaces as you like.\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
+        body: '• Use "+ New section" in the sidebar to add as many spaces as you like.\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n  - Inspiration: films, books, quotes\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
       },
     ],
     plans: [
@@ -75,9 +91,14 @@ function load() {
   return seed();
 }
 function normalize(d) {
-  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.checks ||= {};
+  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.checks ||= {};
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
   if ((d.v || 1) < 2) migrateV2(d);
+  if (d.v < 3) {
+    if (!d.sections.some((s) => s.type === 'inspo')) d.sections.push({ id: uid(), name: 'Inspiration', icon: '✨', type: 'inspo', created: Date.now() });
+    d.v = 3;
+  }
+  d.sections.forEach((s) => { if (s.type === 'plan') s.groups ||= []; });
   return d;
 }
 /* v2: English default section names, drop the old "생각 정리" section (its memos move to Memo) */
@@ -170,7 +191,7 @@ function planGroup(p) {
 /* ───────── routing ───────── */
 function parseHash() {
   const h = location.hash.slice(1);
-  if (h.startsWith('s-')) return { name: 'section', id: h.slice(2) };
+  if (h.startsWith('s-')) { const [id, group] = h.slice(2).split('-'); return { name: 'section', id, group: group || null }; }
   if (h === 'search') return { name: 'search', q: view.q || '' };
   if (h === 'settings') return { name: 'settings' };
   return { name: 'today' };
@@ -178,7 +199,7 @@ function parseHash() {
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#new-memo') return quickNewMemo();
-  view = parseHash(); closeDrawer(); render(); window.scrollTo(0, 0);
+  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) view.kind = prev.kind; closeDrawer(); render(); window.scrollTo(0, 0);
 });
 
 /* ───────── render ───────── */
@@ -193,7 +214,9 @@ function render() {
     const sec = S.sections.find((s) => s.id === view.id);
     if (!sec) { view = { name: 'today' }; return go('#today'); }
     title = `${sec.icon} ${sec.name}`;
-    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : renderRoutineSection(sec);
+    const grp = sec.type === 'plan' && view.group ? (sec.groups || []).find((g) => g.id === view.group) : null;
+    if (grp) title = `${grp.icon} ${grp.name}`;
+    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : renderRoutineSection(sec);
   }
   $('#topbarTitle').textContent = title;
   document.title = title === 'Grove' ? 'Grove' : `${title} · Grove`;
@@ -201,23 +224,29 @@ function render() {
 }
 
 function renderSidebar() {
-  const active = (n, id) => (view.name === n && (!id || view.id === id) ? ' active' : '');
+  const active = (n, id, g) => (view.name === n && (!id || view.id === id) && (g === undefined || (view.group || null) === g) ? ' active' : '');
   const count = (s) => s.type === 'memo' ? S.memos.filter((m) => m.sectionId === s.id).length
+    : s.type === 'inspo' ? S.inspos.filter((x) => x.sectionId === s.id).length
     : s.type === 'plan' ? S.plans.filter((p) => p.sectionId === s.id && !p.done).length
       : (() => { const rs = S.routines.filter((r) => r.sectionId === s.id && isOn(r)); return rs.length ? `${rs.filter((r) => isChecked(r.id)).length}/${rs.length}` : ''; })();
   $('#sidebar').innerHTML = `
     <div class="brand">
       <div class="brand-mark">${svgLeaf}</div>
-      <div><div class="brand-name">Grove</div><div class="brand-sub">your quiet place to grow</div></div>
+      <div class="brand-name">Grove</div>
     </div>
     <button class="nav-item${active('today')}" data-act="go" data-to="#today"><span class="ni-icon">🏡</span><span class="ni-label">Today</span></button>
     <div class="nav-head"><span>SECTIONS</span><button class="nav-add" data-act="new-section" aria-label="Add section">+</button></div>
     <div class="nav-sections">
       ${S.sections.map((s) => `
-        <button class="nav-item${active('section', s.id)}" data-act="go" data-to="#s-${s.id}">
+        <button class="nav-item${active('section', s.id, s.type === 'plan' ? null : undefined)}" data-act="go" data-to="#s-${s.id}">
           <span class="ni-icon">${esc(s.icon)}</span><span class="ni-label">${esc(s.name)}</span>
           <span class="ni-count">${count(s)}</span>
-        </button>`).join('')}
+        </button>
+        ${s.type === 'plan' ? (s.groups || []).map((g) => `
+        <button class="nav-item nav-sub${active('section', s.id, g.id)}" data-act="go" data-to="#s-${s.id}-${g.id}">
+          <span class="ni-icon">${esc(g.icon)}</span><span class="ni-label">${esc(g.name)}</span>
+          <span class="ni-count">${S.plans.filter((p) => p.groupId === g.id && !p.done).length || ''}</span>
+        </button>`).join('') : ''}`).join('')}
     </div>
     <button class="nav-new" data-act="new-section">＋ New section</button>
     <div class="nav-spacer"></div>
@@ -273,7 +302,7 @@ function renderToday() {
       </div>
     </div>
 
-    <div class="section-title">🌱 Routines for today</div>
+    <div class="section-title">🌱 Routines</div>
     ${rs.length ? `<div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>`
       : `<div class="empty"><div class="e-icon">🌱</div>Add daily habits in a Routine section</div>`}
 
@@ -284,7 +313,7 @@ function renderToday() {
           : `<div class="empty">Nothing due in the next 7 days</div>`}
       </div>
       <div>
-        <div class="section-title">📝 Recent memos</div>
+        <div class="section-title">📝 Memos</div>
         ${recent.length ? `<div class="list">${recent.map((m) => `
           <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
             <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
@@ -292,6 +321,15 @@ function renderToday() {
             <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
           </button>`).join('')}</div>` : `<div class="empty">No memos yet</div>`}
       </div>
+    </div>
+    ${(() => {
+      const secs = new Set(S.sections.filter((x) => x.type === 'inspo').map((x) => x.id));
+      const pool = S.inspos.filter((x) => secs.has(x.sectionId) && x.text);
+      if (!pool.length) return '';
+      const seedN = [...dkey()].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
+      return `<div class="section-title">✨ Inspiration</div>${inspoCard(pool[seedN % pool.length], true)}`;
+    })()}
+    <div>
     </div>
     ${t ? '' : ''}`;
 }
@@ -379,8 +417,14 @@ function memoGrid(ms, total) {
 }
 
 /* ── Plan ── */
-function planRow(p, showSec) {
+function groupOf(p) {
+  if (!p.groupId) return null;
+  const sec = S.sections.find((s) => s.id === p.sectionId);
+  return (sec?.groups || []).find((g) => g.id === p.groupId) || null;
+}
+function planRow(p, showSec, showGroup) {
   const g = planGroup(p);
+  const grp = showGroup ? groupOf(p) : null;
   const sd = p.steps?.length ? p.steps.filter((s) => s.done).length : 0;
   return `
     <div class="card plan${p.done ? ' done' : ''}">
@@ -391,13 +435,19 @@ function planRow(p, showSec) {
           <span class="prio p${p.priority || 0}"></span>
           ${p.due ? `<span class="chip${g === 'overdue' ? ' over' : g === 'today' ? ' today' : ''}">📅 ${dueLabel(p.due)}</span>` : ''}
           ${p.steps?.length ? `<span class="chip">${sd}/${p.steps.length}</span><span class="mini-bar"><i style="width:${(sd / p.steps.length) * 100}%"></i></span>` : ''}
-          ${showSec ? `<span class="chip sec">${secName(p.sectionId)}</span>` : ''}
+          ${grp ? `<span class="chip sec">${esc(grp.icon)} ${esc(grp.name)}</span>` : ''}
+          ${showSec ? `<span class="chip sec">${secName(p.sectionId)}${(() => { const x = groupOf(p); return x ? ` › ${esc(x.icon)} ${esc(x.name)}` : ''; })()}</span>` : ''}
         </div>
       </button>
     </div>`;
 }
 function renderPlanSection(sec) {
-  const ps = S.plans.filter((p) => p.sectionId === sec.id);
+  const gl = sec.groups || [];
+  const cur = view.group ? gl.find((g) => g.id === view.group) : null;
+  if (view.group && !cur) view.group = null;
+  const all = S.plans.filter((p) => p.sectionId === sec.id);
+  const ps = cur ? all.filter((p) => p.groupId === cur.id) : all;
+  const showGroup = !cur && gl.length > 0;
   const groups = { overdue: [], today: [], upcoming: [], nodate: [], done: [] };
   ps.forEach((p) => groups[planGroup(p)].push(p));
   const sortDue = (a, b) => (a.due || '').localeCompare(b.due || '') || (b.priority || 0) - (a.priority || 0);
@@ -406,23 +456,63 @@ function renderPlanSection(sec) {
   groups.done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const block = (key, label) => groups[key].length ? `
     <div class="section-title">${label} <span class="count">${groups[key].length}</span></div>
-    <div class="list">${groups[key].map((p) => planRow(p)).join('')}</div>` : '';
+    <div class="list">${groups[key].map((p) => planRow(p, false, showGroup)).join('')}</div>` : '';
   const open = ps.length - groups.done.length;
   return `
     ${sectionHead(sec, `${open} in progress · ${groups.done.length} done`)}
-    <form class="card quick-add" data-form="quick-plan" data-sec="${sec.id}">
+    <div class="tabs">
+      <button class="tab${cur ? '' : ' on'}" data-act="go" data-to="#s-${sec.id}">All <span>${all.filter((p) => !p.done).length}</span></button>
+      ${gl.map((g) => `<button class="tab${cur?.id === g.id ? ' on' : ''}" data-act="go" data-to="#s-${sec.id}-${g.id}">${esc(g.icon)} ${esc(g.name)} <span>${all.filter((p) => p.groupId === g.id && !p.done).length}</span></button>`).join('')}
+      <button class="tab add" data-act="new-group" data-sec="${sec.id}">＋ Group</button>
+    </div>
+    ${cur ? `<div class="group-head"><span class="gh-icon">${esc(cur.icon)}</span><span class="gh-name">${esc(cur.name)}</span><button class="btn btn-ghost btn-sm" data-act="edit-group" data-sec="${sec.id}" data-id="${cur.id}">Edit group</button></div>` : ''}
+    <form class="card quick-add" data-form="quick-plan" data-sec="${sec.id}" data-group="${cur?.id || ''}">
       <span style="color:var(--ink-3);font-size:18px">＋</span>
-      <input name="title" placeholder="Add a plan and press Enter" autocomplete="off" />
+      <input name="title" placeholder="Add a plan…" autocomplete="off" />
       <input name="due" type="date" aria-label="Due date" />
     </form>
-    ${!ps.length ? `<div class="empty" style="margin-top:14px"><div class="e-icon">🎯</div>What do you want to get done?</div>` : ''}
+    ${!ps.length ? `<div class="empty" style="margin-top:14px"><div class="e-icon">${cur ? esc(cur.icon) : '🎯'}</div>${cur ? `Nothing in ${esc(cur.name)} yet` : 'What do you want to get done?'}${!cur && !gl.length ? '<br/><span style="font-size:13px">Tip: use ＋ Group to split plans, e.g. School or Work</span>' : ''}</div>` : ''}
     ${block('overdue', '⚠️ Overdue')}
     ${block('today', '☀️ Today')}
     ${block('upcoming', '🗓️ Upcoming')}
     ${block('nodate', '📋 Someday')}
     ${groups.done.length ? `<details class="done-group"${view.showDone ? ' open' : ''}>
       <summary class="section-title">✅ Completed <span class="count">${groups.done.length}</span><span class="link">Show / hide</span></summary>
-      <div class="list">${groups.done.map((p) => planRow(p)).join('')}</div></details>` : ''}`;
+      <div class="list">${groups.done.map((p) => planRow(p, false, showGroup)).join('')}</div></details>` : ''}`;
+}
+
+/* ── Inspiration ── */
+const stars = (n, size = 13) => n ? `<span class="stars" style="font-size:${size}px">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>` : '';
+function inspoCard(x, wide) {
+  const k = KINDS[x.kind] || KINDS.other;
+  if (x.kind === 'quote' || (!x.title && x.text)) {
+    return `<button class="card inspo quote${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
+      <div class="q-text">${esc(x.text || x.title)}</div>
+      <div class="q-by">${x.who ? `— ${esc(x.who)}` : ''}${x.title && x.text ? `${x.who ? ', ' : '— '}<i>${esc(x.title)}</i>` : ''}</div>
+      ${x.kind !== 'quote' ? `<div class="i-kind">${k.icon} ${k.label}</div>` : ''}
+    </button>`;
+  }
+  return `<button class="card inspo${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
+    <div class="i-kind">${k.icon} ${k.label}${x.date ? ` · ${dueLabel(x.date).replace(/ · D-\d+$/, '')}` : ''}</div>
+    <div class="i-title">${esc(x.title || 'Untitled')}</div>
+    ${x.who ? `<div class="i-who">${esc(x.who)}</div>` : ''}
+    ${stars(x.rating)}
+    ${x.text ? `<div class="i-line">“${esc(x.text)}”</div>` : x.note ? `<div class="i-note">${esc(x.note)}</div>` : ''}
+  </button>`;
+}
+function renderInspoSection(sec) {
+  const all = S.inspos.filter((x) => x.sectionId === sec.id).sort((a, b) => b.created - a.created);
+  const kind = view.kind && KINDS[view.kind] ? view.kind : '';
+  const xs = kind ? all.filter((x) => x.kind === kind) : all;
+  return `
+    ${sectionHead(sec, `${all.length} saved · films, books, quotes & more`)}
+    <div class="tabs">
+      <button class="tab${kind ? '' : ' on'}" data-act="inspo-kind" data-k="">All <span>${all.length}</span></button>
+      ${Object.entries(KINDS).map(([k, v]) => `<button class="tab${kind === k ? ' on' : ''}" data-act="inspo-kind" data-k="${k}">${v.icon} ${v.label}${all.filter((x) => x.kind === k).length ? ` <span>${all.filter((x) => x.kind === k).length}</span>` : ''}</button>`).join('')}
+    </div>
+    ${xs.length ? `<div class="inspo-grid">${xs.map((x) => inspoCard(x)).join('')}</div>`
+      : `<div class="empty"><div class="e-icon">${kind ? KINDS[kind].icon : '✨'}</div>${kind ? `No ${KINDS[kind].label.toLowerCase()}s yet` : 'Save the films, books and words that move you'}</div>`}
+    <button class="fab" data-act="new-inspo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>Add</button>`;
 }
 
 /* ── Search ── */
@@ -451,7 +541,8 @@ function searchResults(q) {
   const ms = S.memos.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(lq)).sort((a, b) => b.updated - a.updated);
   const ps = S.plans.filter((p) => (p.title + ' ' + (p.note || '') + ' ' + (p.steps || []).map((s) => s.text).join(' ')).toLowerCase().includes(lq));
   const rs = S.routines.filter((r) => r.name.toLowerCase().includes(lq));
-  if (!ms.length && !ps.length && !rs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
+  const xs = S.inspos.filter((x) => [x.title, x.who, x.text, x.note].join(' ').toLowerCase().includes(lq));
+  if (!ms.length && !ps.length && !rs.length && !xs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
     ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
       <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
@@ -460,7 +551,8 @@ function searchResults(q) {
         <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
       </button>`).join('')}</div>` : ''}
     ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
-    ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}`;
+    ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}
+    ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div><div class="inspo-grid">${xs.map((x) => inspoCard(x)).join('')}</div>` : ''}`;
 }
 
 /* ── Settings ── */
@@ -651,7 +743,7 @@ function openPlan(id) {
       </div>
       <div class="grid-2" style="gap:0 14px">
         <div class="field"><label>Due date</label><input type="date" class="input" id="pDue" value="${p.due || ''}" /></div>
-        ${planSecs.length > 1 ? `<div class="field"><label>Section</label><select class="select" id="pSec">${planSecs.map((s) => `<option value="${s.id}"${s.id === p.sectionId ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : '<div></div>'}
+        ${planSecs.length > 1 || planSecs.some((x) => (x.groups || []).length) ? `<div class="field"><label>Group</label><select class="select" id="pSec">${planSecs.map((x) => `<option value="${x.id}|"${x.id === p.sectionId && !p.groupId ? ' selected' : ''}>${esc(x.icon)} ${esc(x.name)}</option>${(x.groups || []).map((g) => `<option value="${x.id}|${g.id}"${x.id === p.sectionId && p.groupId === g.id ? ' selected' : ''}>&nbsp;&nbsp;&nbsp;${esc(x.name)} › ${esc(g.icon)} ${esc(g.name)}</option>`).join('')}`).join('')}</select></div>` : '<div></div>'}
       </div>
       <div class="field"><span class="field-label">Priority</span>
         <div class="seg" id="pPrio">${['Normal', 'High', 'Urgent'].map((l, i) => `<button data-v="${i}" class="${(p.priority || 0) === i ? 'on' : ''}">${['⚪', '🟡', '🔴'][i]} ${l}</button>`).join('')}</div>
@@ -670,7 +762,7 @@ function openPlan(id) {
   $('#pTitle').addEventListener('input', (e) => { p.title = e.target.value; upd(); });
   $('#pDue').addEventListener('change', (e) => { p.due = e.target.value || ''; upd(); });
   $('#pNote').addEventListener('input', (e) => { p.note = e.target.value; upd(); });
-  $('#pSec')?.addEventListener('change', (e) => { p.sectionId = e.target.value; $('.crumb').innerHTML = secName(p.sectionId); upd(); });
+  $('#pSec')?.addEventListener('change', (e) => { const [sid, gid] = e.target.value.split('|'); p.sectionId = sid; p.groupId = gid || ''; $('.crumb').innerHTML = secName(p.sectionId); upd(); });
   $('#pDone').addEventListener('click', (e) => { p.done = !p.done; p.doneAt = p.done ? Date.now() : 0; e.currentTarget.classList.toggle('on', p.done); upd(); });
   $('#pPrio').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; p.priority = +b.dataset.v; $$('#pPrio button').forEach((x) => x.classList.toggle('on', x === b)); upd(); });
   $('#stepForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#stepIn').value.trim(); if (!v) return; p.steps.push({ id: uid(), text: v, done: false }); $('#stepIn').value = ''; draw(); upd(); });
@@ -682,6 +774,47 @@ function openPlan(id) {
   });
   $('#planSteps').addEventListener('input', (e) => { if (e.target.dataset.step !== 'text') return; const s = p.steps.find((x) => x.id === e.target.closest('.step').dataset.sid); s.text = e.target.value; upd(); });
   if (!p.title) setTimeout(() => $('#pTitle').focus(), 280);
+}
+
+function openInspo(id) {
+  const x = S.inspos.find((i) => i.id === id);
+  if (!x) return;
+  const draw = () => {
+    const k = KINDS[x.kind];
+    const isQ = x.kind === 'quote';
+    $('#inspoForm').innerHTML = `
+      <div class="seg kind-seg" id="iKind">${Object.entries(KINDS).map(([kk, v]) => `<button data-v="${kk}" class="${x.kind === kk ? 'on' : ''}">${v.icon} ${v.label}</button>`).join('')}</div>
+      ${isQ ? `<textarea class="quote-input" id="iText" rows="3" placeholder="Write the quote…">${esc(x.text)}</textarea>`
+        : `<input class="title-input" id="iTitle" placeholder="${k.label} title" value="${esc(x.title)}" />`}
+      <div class="grid-2" style="gap:0 14px;margin-top:10px">
+        <div class="field"><label>${k.who}</label><input class="input" id="iWho" value="${esc(x.who)}" placeholder="${isQ ? 'e.g. Maya Angelou' : k.who}" /></div>
+        ${isQ ? `<div class="field"><label>Source (optional)</label><input class="input" id="iTitle" value="${esc(x.title)}" placeholder="Book, film, speech…" /></div>`
+          : `<div class="field"><label>Date</label><input type="date" class="input" id="iDate" value="${x.date || ''}" /></div>`}
+      </div>
+      ${isQ ? '' : `<div class="field"><span class="field-label">Rating</span><div class="star-pick" id="iRate">${[1, 2, 3, 4, 5].map((n) => `<button data-v="${n}" class="${n <= x.rating ? 'on' : ''}" aria-label="${n} stars">★</button>`).join('')}</div></div>
+      <div class="field"><label>Favorite line (optional)</label><textarea class="textarea" id="iText" style="min-height:70px" placeholder="A line that stayed with you">${esc(x.text)}</textarea></div>`}
+      <div class="field"><label>Thoughts</label><textarea class="textarea" id="iNote" placeholder="Why it matters to you…">${esc(x.note)}</textarea></div>`;
+    const upd = () => { x.updated = Date.now(); save(true); };
+    $('#iKind').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; x.kind = b.dataset.v; upd(); draw(); });
+    $('#iTitle')?.addEventListener('input', (e) => { x.title = e.target.value; upd(); });
+    $('#iText')?.addEventListener('input', (e) => { x.text = e.target.value; upd(); });
+    $('#iWho').addEventListener('input', (e) => { x.who = e.target.value; upd(); });
+    $('#iNote').addEventListener('input', (e) => { x.note = e.target.value; upd(); });
+    $('#iDate')?.addEventListener('change', (e) => { x.date = e.target.value; upd(); });
+    $('#iRate')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const v = +b.dataset.v; x.rating = x.rating === v ? 0 : v; upd(); $$('#iRate button').forEach((y) => y.classList.toggle('on', +y.dataset.v <= x.rating)); });
+  };
+  openSheet(`
+    <div class="sheet-bar">
+      <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
+      <div class="crumb">${secName(x.sectionId)}</div>
+      <button class="icon-btn" data-act="del-inspo" aria-label="Delete">${svgTrash}</button>
+    </div>
+    <div class="sheet-body"><div class="sheet-inner" id="inspoForm"></div></div>`, {
+    type: 'inspo', id,
+    onClose: () => { if (!x.title.trim() && !x.text.trim() && !x.note.trim() && !x.who.trim()) S.inspos = S.inspos.filter((i) => i.id !== id); save(true); },
+  });
+  draw();
+  if (!x.title && !x.text) setTimeout(() => ($('#iText') || $('#iTitle'))?.focus(), 280);
 }
 
 /* ───────── Modals ───────── */
@@ -716,17 +849,15 @@ function sectionModal(id) {
     ${sec ? '' : `<div class="field"><span class="field-label">Type</span><div class="type-cards" id="secType">
       ${Object.entries(TYPES).map(([k, t]) => `<button class="type-card${k === st.type ? ' on' : ''}" data-v="${k}"><span class="t-ic">${t.icon}</span><div><b>${t.label}</b>${t.desc}</div></button>`).join('')}
     </div></div>`}
-    <div class="field"><span class="field-label">Icon</span><div class="emoji-grid" id="secIcon">
-      ${ICONS.map((i) => `<button data-v="${i}" class="${i === st.icon ? 'on' : ''}">${i}</button>`).join('')}
-    </div></div>
+    ${emojiField('secIcon', st.icon)}
     <div class="modal-actions">
       ${sec ? `<button class="btn btn-danger left" data-act="del-section" data-id="${sec.id}">Delete</button>` : ''}
       ${sec ? `<button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="-1" aria-label="Move up">↑</button><button class="btn btn-ghost" data-act="move-section" data-id="${sec.id}" data-dir="1" aria-label="Move down">↓</button>` : ''}
       <button class="btn btn-ghost" data-act="modal-no">Cancel</button>
       <button class="btn btn-primary" id="secSave">${sec ? 'Save' : 'Create'}</button>
     </div>`);
-  $('#secType')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.type = b.dataset.v; $$('#secType button').forEach((x) => x.classList.toggle('on', x === b)); if (!$('#secName').value) { st.icon = TYPES[st.type].icon; $$('#secIcon button').forEach((x) => x.classList.toggle('on', x.dataset.v === st.icon)); } });
-  $('#secIcon').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.icon = b.dataset.v; $$('#secIcon button').forEach((x) => x.classList.toggle('on', x === b)); });
+  const secPick = bindEmoji('secIcon', st);
+  $('#secType')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.type = b.dataset.v; $$('#secType button').forEach((x) => x.classList.toggle('on', x === b)); if (!$('#secName').value) secPick(TYPES[st.type].icon); });
   const submit = () => {
     const name = $('#secName').value.trim();
     if (!name) { $('#secName').focus(); return toast('Please enter a name'); }
@@ -741,6 +872,62 @@ function sectionModal(id) {
   setTimeout(() => $('#secName').focus(), 50);
 }
 
+/* ── emoji picker: presets + any emoji from the keyboard ── */
+function emojiField(id, cur) {
+  return `<div class="field"><span class="field-label">Icon</span>
+    <div class="emoji-custom">
+      <span class="emoji-preview" id="${id}Prev">${esc(cur)}</span>
+      <input class="input" id="${id}In" placeholder="Type or paste any emoji 😊" autocomplete="off" />
+    </div>
+    <div class="emoji-grid" id="${id}">${ICONS.map((i) => `<button type="button" data-v="${i}" class="${i === cur ? 'on' : ''}">${i}</button>`).join('')}</div></div>`;
+}
+function bindEmoji(id, st) {
+  const set = (v) => {
+    if (!v) return;
+    st.icon = v; $(`#${id}Prev`).textContent = v;
+    $$(`#${id} button`).forEach((x) => x.classList.toggle('on', x.dataset.v === v));
+  };
+  $(`#${id}`).addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { set(b.dataset.v); $(`#${id}In`).value = ''; } });
+  $(`#${id}In`).addEventListener('input', (e) => { if (e.isComposing) return; const g = firstGrapheme(e.target.value); if (g) set(g); });
+  $(`#${id}In`).addEventListener('compositionend', (e) => { const g = firstGrapheme(e.target.value); if (g) set(g); });
+  return set;
+}
+
+function groupModal(secId, gid) {
+  const sec = S.sections.find((s) => s.id === secId);
+  sec.groups ||= [];
+  const g = gid ? sec.groups.find((x) => x.id === gid) : null;
+  const st = { icon: g?.icon || '📘' };
+  const n = g ? S.plans.filter((p) => p.groupId === g.id).length : 0;
+  openModal(`
+    <h3>${g ? 'Edit group' : 'New group'}</h3>
+    <p class="desc">Split ${esc(sec.icon)} ${esc(sec.name)} into smaller lists — e.g. School, Work, Side project</p>
+    <div class="field"><label>Name</label><input class="input" id="gName" maxlength="30" placeholder="e.g. School" value="${esc(g?.name || '')}" /></div>
+    ${emojiField('gIcon', st.icon)}
+    <div class="modal-actions">
+      ${g ? `<button class="btn btn-danger left" id="gDel">Delete</button>` : ''}
+      <button class="btn btn-ghost" data-act="modal-no">Cancel</button>
+      <button class="btn btn-primary" id="gSave">${g ? 'Save' : 'Create'}</button>
+    </div>`);
+  bindEmoji('gIcon', st);
+  const submit = () => {
+    const name = $('#gName').value.trim();
+    if (!name) { $('#gName').focus(); return toast('Please enter a name'); }
+    if (g) { g.name = name; g.icon = st.icon; save(); closeModal(); render(); }
+    else { const ng = { id: uid(), name, icon: st.icon }; sec.groups.push(ng); save(); closeModal(); go(`#s-${sec.id}-${ng.id}`); }
+  };
+  $('#gSave').addEventListener('click', submit);
+  $('#gName').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
+  $('#gDel')?.addEventListener('click', async () => {
+    closeModal();
+    if (!(await ask('Delete this group?', n ? `Its ${n} plan${n === 1 ? '' : 's'} will stay in ${esc(sec.name)}, just without a group.` : 'The group will be removed.', 'Delete', true))) return;
+    sec.groups = sec.groups.filter((x) => x.id !== g.id);
+    S.plans.forEach((p) => { if (p.groupId === g.id) p.groupId = ''; });
+    save(); toast('Group deleted'); go(`#s-${sec.id}`);
+  });
+  if (!g) setTimeout(() => $('#gName').focus(), 50);
+}
+
 function routineModal(id, secId) {
   const r = id ? S.routines.find((x) => x.id === id) : null;
   const st = { icon: r?.icon || '🌿', days: r ? [...r.days] : [0, 1, 2, 3, 4, 5, 6] };
@@ -749,7 +936,7 @@ function routineModal(id, secId) {
     <h3>${r ? 'Edit routine' : 'New routine'}</h3>
     <p class="desc">A habit you check off on chosen days</p>
     <div class="field"><label>Name</label><input class="input" id="rName" maxlength="40" placeholder="e.g. Stretch for 10 min" value="${esc(r?.name || '')}" /></div>
-    <div class="field"><span class="field-label">Icon</span><div class="emoji-grid" id="rIcon">${ICONS.map((i) => `<button data-v="${i}" class="${i === st.icon ? 'on' : ''}">${i}</button>`).join('')}</div></div>
+    ${emojiField('rIcon', st.icon)}
     <div class="field"><span class="field-label">Repeat on</span>
       <div class="days" id="rDays">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-v="${d}" class="${st.days.includes(d) ? 'on' : ''}">${WD2[d]}</button>`).join('')}</div>
       <div class="seg" style="margin-top:8px" id="rPreset"><button data-p="all">Every day</button><button data-p="wk">Weekdays</button><button data-p="we">Weekends</button></div>
@@ -762,7 +949,7 @@ function routineModal(id, secId) {
       <button class="btn btn-primary" id="rSave">${r ? 'Save' : 'Add'}</button>
     </div>`);
   const drawDays = () => $$('#rDays button').forEach((b) => b.classList.toggle('on', st.days.includes(+b.dataset.v)));
-  $('#rIcon').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.icon = b.dataset.v; $$('#rIcon button').forEach((x) => x.classList.toggle('on', x === b)); });
+  bindEmoji('rIcon', st);
   $('#rDays').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const v = +b.dataset.v; st.days = st.days.includes(v) ? st.days.filter((x) => x !== v) : [...st.days, v]; drawDays(); });
   $('#rPreset').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.days = { all: [0, 1, 2, 3, 4, 5, 6], wk: [1, 2, 3, 4, 5], we: [0, 6] }[b.dataset.p]; drawDays(); });
   const submit = () => {
@@ -801,6 +988,8 @@ const actions = {
   'close-drawer': closeDrawer,
   'new-section': () => { closeDrawer(); sectionModal(); },
   'edit-section': (el) => sectionModal(el.dataset.id),
+  'new-group': (el) => groupModal(el.dataset.sec),
+  'edit-group': (el) => groupModal(el.dataset.sec, el.dataset.id),
   'move-section': (el) => {
     const i = S.sections.findIndex((s) => s.id === el.dataset.id); const j = i + +el.dataset.dir;
     if (j < 0 || j >= S.sections.length) return;
@@ -809,12 +998,13 @@ const actions = {
   'del-section': async (el) => {
     const sec = S.sections.find((s) => s.id === el.dataset.id);
     closeModal();
-    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length;
+    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length + S.inspos.filter((x) => x.sectionId === sec.id).length;
     if (!(await ask('Delete this section?', `"${esc(sec.name)}"${n ? ` and its ${n} item${n === 1 ? '' : 's'}` : ''} will be removed.`, 'Delete', true))) return;
     S.sections = S.sections.filter((s) => s.id !== sec.id);
     S.memos = S.memos.filter((m) => m.sectionId !== sec.id);
     S.plans = S.plans.filter((p) => p.sectionId !== sec.id);
     S.routines = S.routines.filter((r) => r.sectionId !== sec.id);
+    S.inspos = S.inspos.filter((x) => x.sectionId !== sec.id);
     save(); toast('Section deleted'); go('#today');
   },
   'modal-yes': () => closeModal(true),
@@ -835,6 +1025,17 @@ const actions = {
   'close-sheet': () => closeSheet(),
 
   'open-plan': (el) => openPlan(el.dataset.id),
+  'inspo-kind': (el) => { view.kind = el.dataset.k; render(); },
+  'new-inspo': (el) => {
+    const x = { id: uid(), sectionId: el.dataset.sec, kind: view.kind || 'quote', title: '', who: '', text: '', note: '', rating: 0, date: dkey(), created: Date.now(), updated: Date.now() };
+    S.inspos.push(x); save(true); openInspo(x.id);
+  },
+  'open-inspo': (el) => openInspo(el.dataset.id),
+  'del-inspo': async () => {
+    const id = sheetCtx.id;
+    if (!(await ask('Delete this item?', 'This can\'t be undone.', 'Delete', true))) return;
+    S.inspos = S.inspos.filter((x) => x.id !== id); save(true); closeSheet(); toast('Deleted');
+  },
   'toggle-plan': (el) => {
     const p = S.plans.find((x) => x.id === el.dataset.id); p.done = !p.done; p.doneAt = p.done ? Date.now() : 0;
     save(); if (p.done) toast('Done — nice work 👏'); render();
@@ -918,7 +1119,7 @@ document.addEventListener('submit', (e) => {
   }
   if (f.dataset.form === 'quick-plan') {
     const v = f.title.value.trim(); if (!v) return;
-    S.plans.push({ id: uid(), sectionId: f.dataset.sec, title: v, note: '', due: f.due.value || '', priority: 0, done: false, steps: [], created: Date.now() });
+    S.plans.push({ id: uid(), sectionId: f.dataset.sec, groupId: f.dataset.group || '', title: v, note: '', due: f.due.value || '', priority: 0, done: false, steps: [], created: Date.now() });
     save(); render(); setTimeout(() => $('[data-form="quick-plan"] input[name="title"]')?.focus(), 0);
   }
 });
