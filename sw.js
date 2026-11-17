@@ -1,5 +1,5 @@
 /* Grove — Service Worker */
-const VERSION = 'grove-v1.9.0';
+const VERSION = 'grove-v1.9.1';
 const SHELL = [
   './',
   './index.html',
@@ -34,7 +34,7 @@ self.addEventListener('fetch', (e) => {
 
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req).then((res) => {
+      fetch(req, { cache: 'no-cache' }).then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put('./index.html', copy));
         return res;
@@ -47,18 +47,14 @@ self.addEventListener('fetch', (e) => {
   const isFont = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname);
   if (!sameOrigin && !isFont) return;
 
-  e.respondWith(
-    caches.match(req).then((cached) => {
-      const net = fetch(req).then((res) => {
-        if (res && (res.ok || res.type === 'opaque')) {
-          const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || net;
-    })
-  );
+  // App files: network first so a new deploy shows up on the very next open; cache only when offline.
+  // Fonts: cache first (they never change).
+  const put = (res) => { if (res && (res.ok || res.type === 'opaque')) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); } return res; };
+  if (sameOrigin) {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then(put).catch(() => caches.match(req, { ignoreSearch: true })));
+  } else {
+    e.respondWith(caches.match(req).then((cached) => cached || fetch(req).then(put)));
+  }
 });
 
 // 알림 클릭 → 앱 열기

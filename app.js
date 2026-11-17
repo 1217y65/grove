@@ -1753,7 +1753,10 @@ async function registerPeriodic() {
 /* ───────── PWA ───────── */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then(() => { if (S.settings.notify) registerPeriodic(); }).catch((e) => console.warn('SW registration failed', e));
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+      if (S.settings.notify) registerPeriodic();
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch((e) => console.warn('SW registration failed', e));
   });
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.type === 'goto') go(e.data.hash || '#today'); });
 }
