@@ -75,8 +75,8 @@ function seed() {
         steps: [{ id: uid(), text: 'Create a new section', done: false }, { id: uid(), text: 'Check off a routine', done: false }, { id: uid(), text: 'Turn on notifications', done: false }] },
     ],
     routines: [
-      { id: uid(), sectionId: routine.id, name: 'Drink a glass of water', icon: '💧', time: '08:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
-      { id: uid(), sectionId: routine.id, name: 'Daily reflection', icon: '✏️', time: '22:00', days: [0, 1, 2, 3, 4, 5, 6], created: now },
+      { id: uid(), sectionId: routine.id, name: 'Drink a glass of water', icon: '💧', times: ['08:00', '13:00', '17:00'], days: [0, 1, 2, 3, 4, 5, 6], created: now },
+      { id: uid(), sectionId: routine.id, name: 'Daily reflection', icon: '✏️', times: ['22:00'], days: [0, 1, 2, 3, 4, 5, 6], created: now },
     ],
     checks: {},
     settings: { notify: false, remindAt: '21:00', remind: true, notified: {} },
@@ -99,6 +99,7 @@ function normalize(d) {
     d.v = 3;
   }
   d.sections.forEach((s) => { if (s.type === 'plan') s.groups ||= []; });
+  d.routines.forEach((r) => { if (!Array.isArray(r.times)) r.times = r.time ? [r.time] : []; delete r.time; });
   return d;
 }
 /* v2: English default section names, drop the old "생각 정리" section (its memos move to Memo) */
@@ -164,7 +165,8 @@ function todayRoutines() {
   const routineSecs = new Set(S.sections.filter((s) => s.type === 'routine').map((s) => s.id));
   return S.routines.filter((r) => routineSecs.has(r.sectionId) && isOn(r)).sort(byTime);
 }
-const byTime = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99');
+const byTime = (a, b) => (a.times?.[0] || '99:99').localeCompare(b.times?.[0] || '99:99');
+const timesLabel = (ts) => ts.length <= 3 ? ts.join(' · ') : `${ts.slice(0, 2).join(' · ')} +${ts.length - 2}`;
 
 /* ───────── plan helpers ───────── */
 function dueLabel(due) {
@@ -363,7 +365,7 @@ function routineRow(r, showSec) {
       <button class="r-main" data-act="edit-routine" data-id="${r.id}">
         <div class="r-name">${esc(r.icon || '')} ${esc(r.name)}</div>
         <div class="r-meta">
-          ${r.time ? `<span>⏰ ${r.time}</span>` : ''}<span>${daysLabel(r.days)}</span>
+          ${r.times?.length ? `<span>⏰ ${timesLabel(r.times)}</span>` : ''}<span>${daysLabel(r.days)}</span>
           ${st ? `<span class="streak">🔥 ${st}-day streak</span>` : ''}
           ${showSec ? `<span>${secName(r.sectionId)}</span>` : ''}
         </div>
@@ -930,7 +932,7 @@ function groupModal(secId, gid) {
 
 function routineModal(id, secId) {
   const r = id ? S.routines.find((x) => x.id === id) : null;
-  const st = { icon: r?.icon || '🌿', days: r ? [...r.days] : [0, 1, 2, 3, 4, 5, 6] };
+  const st = { icon: r?.icon || '🌿', days: r ? [...r.days] : [0, 1, 2, 3, 4, 5, 6], times: r ? [...(r.times || [])] : [] };
   const routineSecs = S.sections.filter((s) => s.type === 'routine');
   openModal(`
     <h3>${r ? 'Edit routine' : 'New routine'}</h3>
@@ -941,7 +943,10 @@ function routineModal(id, secId) {
       <div class="days" id="rDays">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-v="${d}" class="${st.days.includes(d) ? 'on' : ''}">${WD2[d]}</button>`).join('')}</div>
       <div class="seg" style="margin-top:8px" id="rPreset"><button data-p="all">Every day</button><button data-p="wk">Weekdays</button><button data-p="we">Weekends</button></div>
     </div>
-    <div class="field"><label>Reminder time (optional)</label><input type="time" class="input" id="rTime" value="${r?.time || ''}" /></div>
+    <div class="field"><span class="field-label">Reminders (optional)</span>
+      <div class="times" id="rTimes"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="rAddTime" style="margin-top:8px">＋ Add time</button>
+    </div>
     ${routineSecs.length > 1 ? `<div class="field"><label>Section</label><select class="select" id="rSec">${routineSecs.map((s) => `<option value="${s.id}"${s.id === (r?.sectionId || secId) ? ' selected' : ''}>${esc(s.icon)} ${esc(s.name)}</option>`).join('')}</select></div>` : ''}
     <div class="modal-actions">
       ${r ? `<button class="btn btn-danger left" data-act="del-routine" data-id="${r.id}">Delete</button>` : ''}
@@ -956,13 +961,27 @@ function routineModal(id, secId) {
     const name = $('#rName').value.trim();
     if (!name) { $('#rName').focus(); return toast('Please enter a name'); }
     if (!st.days.length) return toast('Pick at least one day');
-    const time = $('#rTime').value;
+    const times = [...new Set(st.times.filter(Boolean))].sort();
     const sectionId = $('#rSec')?.value || r?.sectionId || secId;
-    if (r) Object.assign(r, { name, icon: st.icon, days: st.days, time, sectionId });
-    else S.routines.push({ id: uid(), sectionId, name, icon: st.icon, days: st.days, time, created: Date.now() });
+    if (r) Object.assign(r, { name, icon: st.icon, days: st.days, times, sectionId });
+    else S.routines.push({ id: uid(), sectionId, name, icon: st.icon, days: st.days, times, created: Date.now() });
     save(); closeModal(); render();
-    if (time && !S.settings.notify) toast('Turn on notifications in Settings to get reminders');
+    if (times.length && !S.settings.notify) toast('Turn on notifications in Settings to get reminders');
   };
+  const drawTimes = () => {
+    $('#rTimes').innerHTML = st.times.length ? st.times.map((t, i) => `
+      <div class="time-row"><span>⏰</span><input type="time" class="input" data-i="${i}" value="${t}" /><button type="button" class="x" data-del="${i}" aria-label="Remove time">✕</button></div>`).join('')
+      : '<div class="times-empty">No reminders — add as many times as you like</div>';
+  };
+  drawTimes();
+  $('#rAddTime').addEventListener('click', () => {
+    const last = st.times[st.times.length - 1];
+    const h = last ? (+last.slice(0, 2) + 3) % 24 : new Date().getHours() + 1;
+    st.times.push(`${pad(h % 24)}:${last ? last.slice(3) : '00'}`); drawTimes();
+    $(`#rTimes input[data-i="${st.times.length - 1}"]`)?.focus();
+  });
+  $('#rTimes').addEventListener('change', (e) => { if (e.target.dataset.i !== undefined) st.times[+e.target.dataset.i] = e.target.value; });
+  $('#rTimes').addEventListener('click', (e) => { const b = e.target.closest('[data-del]'); if (!b) return; st.times.splice(+b.dataset.del, 1); drawTimes(); });
   $('#rSave').addEventListener('click', submit);
   $('#rName').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
   if (!r) setTimeout(() => $('#rName').focus(), 50);
@@ -1174,10 +1193,14 @@ function tick() {
   if (n.date !== today) { n.date = today; n.ids = []; n.reminded = false; }
   let changed = false;
   for (const r of todayRoutines()) {
-    if (!r.time || isChecked(r.id) || n.ids.includes(r.id)) continue;
-    const diff = nowMin - toMin(r.time);
-    if (diff >= 0 && diff <= 15) { notify(`${r.icon || '🌱'} ${r.name}`, `${r.time} · Time for your routine`, `r-${r.id}-${today}`); n.ids.push(r.id); changed = true; }
-    else if (diff > 15) { n.ids.push(r.id); changed = true; }
+    if (isChecked(r.id)) continue;
+    for (const t of r.times || []) {
+      const key = `${r.id}@${t}`;
+      if (n.ids.includes(key)) continue;
+      const diff = nowMin - toMin(t);
+      if (diff >= 0 && diff <= 15) { notify(`${r.icon || '🌱'} ${r.name}`, `${t} · Time for your routine`, `r-${r.id}-${t}-${today}`); n.ids.push(key); changed = true; }
+      else if (diff > 15) { n.ids.push(key); changed = true; }
+    }
   }
   if (S.settings.remind && !n.reminded && S.settings.remindAt) {
     const diff = nowMin - toMin(S.settings.remindAt);
@@ -1204,7 +1227,7 @@ async function syncSchedule() {
     const t = dkey(); const y = dkey(addDays(new Date(), -1));
     const sched = {
       notify: S.settings.notify, remind: S.settings.remind, remindAt: S.settings.remindAt,
-      routines: todayRoutinesAll().map(({ id, name, icon, time, days }) => ({ id, name, icon, time, days })),
+      routines: todayRoutinesAll().map(({ id, name, icon, times, days }) => ({ id, name, icon, times, days })),
       checks: { [t]: S.checks[t] || [], [y]: S.checks[y] || [] },
       notified: S.settings.notified,
     };

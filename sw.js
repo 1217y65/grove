@@ -1,5 +1,5 @@
 /* Grove — Service Worker */
-const VERSION = 'grove-v1.2.0';
+const VERSION = 'grove-v1.3.0';
 const SHELL = [
   './',
   './index.html',
@@ -112,15 +112,18 @@ async function checkRoutines() {
 
   const todays = (s.routines || []).filter((r) => r.days.includes(now.getDay()));
   for (const r of todays) {
-    if (!r.time || done.includes(r.id) || page.includes(r.id) || sent.ids.includes(r.id)) continue;
-    const diff = nowMin - toMin(r.time);
-    if (diff >= 0 && diff <= 60) {
-      await self.registration.showNotification(`${r.icon || '🌱'} ${r.name}`, {
-        body: `${r.time} · Time for your routine`, tag: `r-${r.id}-${today}`,
-        icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
-      });
-      sent.ids.push(r.id);
-    }
+    if (done.includes(r.id)) continue;
+    const times = r.times || (r.time ? [r.time] : []);
+    // only the most recent due time, so a late wake-up doesn't fire a burst
+    const due = times.filter((t) => { const d = nowMin - toMin(t); return d >= 0 && d <= 60; }).sort().pop();
+    if (!due) continue;
+    const key = `${r.id}@${due}`;
+    if (page.includes(key) || sent.ids.includes(key)) continue;
+    await self.registration.showNotification(`${r.icon || '🌱'} ${r.name}`, {
+      body: `${due} · Time for your routine`, tag: `r-${r.id}-${due}-${today}`,
+      icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
+    });
+    sent.ids.push(key);
   }
   if (s.remind && s.remindAt && !sent.reminded && !(s.notified && s.notified.date === today && s.notified.reminded)) {
     const diff = nowMin - toMin(s.remindAt);

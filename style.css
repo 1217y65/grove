@@ -495,3 +495,11 @@ mark { background: #e6dcb8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .inspo-grid { grid-template-columns: 1fr; }
   .inspo.quote .q-text { font-size: 17px; }
 }
+
+/* v1.3: multiple reminder times */
+.times { display: flex; flex-direction: column; gap: 6px; }
+.time-row { display: flex; align-items: center; gap: 8px; }
+.time-row .input { flex: 1; height: 42px; padding: 6px 12px; }
+.time-row .x { width: 34px; height: 34px; border-radius: 9px; color: var(--ink-3); }
+.time-row .x:hover { background: var(--ivory-2); color: var(--ink); }
+.times-empty { font-size: 13px; color: var(--ink-3); padding: 4px 0; }
