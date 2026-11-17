@@ -651,3 +651,12 @@ body.locked .app, body.locked .sheet, body.locked .toast { visibility: hidden; }
 #lockAfter button { padding: 6px 10px; font-size: 12.5px; }
 .set-row.wrap { flex-wrap: wrap; row-gap: 10px; }
 .set-row.wrap .s-text { flex-basis: 100%; }
+
+/* v1.9: collapsible plan groups in sidebar */
+.nav-item .ni-chev { font-size: 17px; line-height: 1; color: var(--side-dim); transition: transform .22s; margin-left: 2px; width: 12px; text-align: center; }
+.nav-item.expanded .ni-chev { transform: rotate(90deg); }
+.nav-subs { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s ease; }
+.nav-subs > div { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
+.nav-subs.open { grid-template-rows: 1fr; }
+.nav-subs .nav-sub { opacity: 0; transform: translateY(-4px); transition: opacity .2s, transform .2s; }
+.nav-subs.open .nav-sub { opacity: 1; transform: none; }

@@ -51,6 +51,9 @@ const svgLeaf = '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 21
 let S = load();
 let view = { name: 'today' };
 let installEvt = null;
+const navOpen = new Set(); // plan sections whose groups are expanded in the sidebar
+let keepDrawer = false;
+let animateOpen = null;
 
 function seed() {
   const s = (name, icon, type) => ({ id: uid(), name, icon, type, created: Date.now() });
@@ -209,7 +212,11 @@ function parseHash() {
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#new-memo') return quickNewMemo();
-  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; } closeDrawer(); render(); window.scrollTo(0, 0);
+  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; }
+  if (view.name !== 'section' || !navOpen.has(view.id)) navOpen.clear();
+  if (view.name === 'section' && view.group) navOpen.add(view.id);
+  if (keepDrawer) keepDrawer = false; else closeDrawer();
+  render(); window.scrollTo(0, 0);
 });
 
 /* ───────── render ───────── */
@@ -249,21 +256,27 @@ function renderSidebar() {
     <button class="nav-item${active('today')}" data-act="go" data-to="#today"><span class="ni-icon">🏡</span><span class="ni-label">Today</span></button>
     <div class="nav-head"><span>SECTIONS</span></div>
     <div class="nav-sections">
-      ${S.sections.map((s) => `
-        <button class="nav-item${active('section', s.id, s.type === 'plan' ? null : undefined)}" data-act="go" data-to="#s-${s.id}">
+      ${S.sections.map((s) => {
+        const gs = s.type === 'plan' ? (s.groups || []) : [];
+        const open = gs.length && navOpen.has(s.id);
+        return `
+        <button class="nav-item${active('section', s.id, s.type === 'plan' ? null : undefined)}${gs.length ? ' has-sub' : ''}${open ? ' expanded' : ''}" data-act="${gs.length ? 'nav-parent' : 'go'}" data-id="${s.id}" data-to="#s-${s.id}">
           <span class="ni-icon">${esc(s.icon)}</span><span class="ni-label">${esc(s.name)}</span>
           <span class="ni-count">${count(s)}</span>
+          ${gs.length ? '<span class="ni-chev" aria-hidden="true">›</span>' : ''}
         </button>
-        ${s.type === 'plan' ? (s.groups || []).map((g) => `
-        <button class="nav-item nav-sub${active('section', s.id, g.id)}" data-act="go" data-to="#s-${s.id}-${g.id}">
-          <span class="ni-icon">${esc(g.icon)}</span><span class="ni-label">${esc(g.name)}</span>
-          <span class="ni-count">${S.plans.filter((p) => p.groupId === g.id && !p.done).length || ''}</span>
-        </button>`).join('') : ''}`).join('')}
+        ${gs.length ? `<div class="nav-subs${open && animateOpen !== s.id ? ' open' : ''}" data-for="${s.id}"><div>${gs.map((g) => `
+          <button class="nav-item nav-sub${active('section', s.id, g.id)}" data-act="go" data-to="#s-${s.id}-${g.id}">
+            <span class="ni-icon">${esc(g.icon)}</span><span class="ni-label">${esc(g.name)}</span>
+            <span class="ni-count">${S.plans.filter((p) => p.groupId === g.id && !p.done).length || ''}</span>
+          </button>`).join('')}</div></div>` : ''}`;
+      }).join('')}
     </div>
     <div class="nav-spacer"></div>
     <button class="nav-item${active('search')}" data-act="go" data-to="#search"><span class="ni-icon">🔍</span><span class="ni-label">Search</span></button>
     <button class="nav-item${active('settings')}" data-act="go" data-to="#settings"><span class="ni-icon">⚙️</span><span class="ni-label">Settings</span></button>
   `;
+  if (animateOpen) { const el = $(`.nav-subs[data-for="${animateOpen}"]`); animateOpen = null; if (el) requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('open'))); }
 }
 
 /* ── Today ── */
@@ -1303,6 +1316,14 @@ function quickNewMemo() {
 
 const actions = {
   go: (el) => go(el.dataset.to),
+  'nav-parent': (el) => {
+    const id = el.dataset.id;
+    const here = view.name === 'section' && view.id === id;
+    if (navOpen.has(id) && here) { navOpen.delete(id); return renderSidebar(); }
+    navOpen.clear(); navOpen.add(id); animateOpen = id;
+    if (here && !view.group) return renderSidebar();
+    keepDrawer = true; go(el.dataset.to);
+  },
   'open-drawer': () => { $('#sidebar').classList.add('open'); $('#scrim').classList.add('open'); },
   'close-drawer': closeDrawer,
   'new-section': () => { closeDrawer(); sectionModal(); },
