@@ -71,7 +71,7 @@ function seed() {
       {
         id: uid(), sectionId: memo.id, pinned: true, created: now, updated: now,
         title: 'Welcome to Grove 🌿',
-        body: '• Use "+ New section" in the sidebar to add as many spaces as you like.\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n  - Inspiration: films, books, quotes\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
+        body: '• Five spaces to grow in:\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n  - Inspiration: films, books, quotes\n  - Faith: QT, prayer, verses\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
       },
     ],
     plans: [
@@ -247,7 +247,7 @@ function renderSidebar() {
       <div class="brand-name">Grove</div>
     </div>
     <button class="nav-item${active('today')}" data-act="go" data-to="#today"><span class="ni-icon">🏡</span><span class="ni-label">Today</span></button>
-    <div class="nav-head"><span>SECTIONS</span><button class="nav-add" data-act="new-section" aria-label="Add section">+</button></div>
+    <div class="nav-head"><span>SECTIONS</span></div>
     <div class="nav-sections">
       ${S.sections.map((s) => `
         <button class="nav-item${active('section', s.id, s.type === 'plan' ? null : undefined)}" data-act="go" data-to="#s-${s.id}">
@@ -260,7 +260,6 @@ function renderSidebar() {
           <span class="ni-count">${S.plans.filter((p) => p.groupId === g.id && !p.done).length || ''}</span>
         </button>`).join('') : ''}`).join('')}
     </div>
-    <button class="nav-new" data-act="new-section">＋ New section</button>
     <div class="nav-spacer"></div>
     <button class="nav-item${active('search')}" data-act="go" data-to="#search"><span class="ni-icon">🔍</span><span class="ni-label">Search</span></button>
     <button class="nav-item${active('settings')}" data-act="go" data-to="#settings"><span class="ni-icon">⚙️</span><span class="ni-label">Settings</span></button>
@@ -860,17 +859,18 @@ window.addEventListener('popstate', () => { if ($('#modal').classList.contains('
 
 function autoGrow(el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, window.innerHeight * 0.5) + 'px'; }
 
-function openMemo(id) {
-  const m = S.memos.find((x) => x.id === id);
+function openMemo(id, draft) {
+  const m = draft || S.memos.find((x) => x.id === id);
   if (!m) return;
+  const isNew = !!draft;
   const memoSecs = S.sections.filter((s) => s.type === 'memo');
   openSheet(`
     <div class="sheet-bar">
-      <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
-      <div class="crumb">${secName(m.sectionId)}</div>
-      <span class="save-state" id="saveState">Saved</span>
+      <button class="icon-btn" data-act="memo-cancel" aria-label="${isNew ? 'Cancel' : 'Back'}">${isNew ? svgClose : svgBack}</button>
+      <div class="crumb crumb-strong">${isNew ? '📝 New memo' : secName(m.sectionId)}</div>
       <button class="icon-btn" data-act="pin-memo" aria-label="Pin" style="color:${m.pinned ? 'var(--g-600)' : 'inherit'}">${svgPin(m.pinned)}</button>
-      <button class="icon-btn" data-act="del-memo" aria-label="Delete">${svgTrash}</button>
+      ${isNew ? '' : `<button class="icon-btn" data-act="del-memo" aria-label="Delete">${svgTrash}</button>`}
+      <button class="done-btn" data-act="memo-done" aria-label="Save">${svgCheck}</button>
     </div>
     <div class="sheet-body"><div class="sheet-inner">
       <input class="title-input" id="mTitle" placeholder="Title" value="${esc(m.title)}" />
@@ -888,16 +888,21 @@ function openMemo(id) {
       </div>
       <textarea class="body-input" id="mBody" placeholder="Start writing…">${esc(m.body)}</textarea>
     </div></div>`, {
-    type: 'memo', id,
-    onClose: () => { if (!m.title.trim() && !m.body.trim()) { S.memos = S.memos.filter((x) => x.id !== id); save(true); } },
+    type: 'memo', id: m.id, isNew, item: m,
+    onClose() {
+      // back gestures / Escape keep what was written; only the ✕ button discards a new memo
+      const has = m.title.trim() || m.body.trim();
+      if (isNew) { if (has && !this.discard) S.memos.push(m); }
+      else if (!has) S.memos = S.memos.filter((x) => x.id !== m.id);
+      save(true);
+    },
   });
   const t = $('#mTitle'), b = $('#mBody');
   autoGrow(b);
   let tm;
   const upd = () => {
     m.title = t.value; m.body = b.value; m.updated = Date.now();
-    $('#saveState').textContent = 'Saving…';
-    clearTimeout(tm); tm = setTimeout(() => { save(true); $('#saveState').textContent = 'Saved'; }, 350);
+    if (!isNew) { clearTimeout(tm); tm = setTimeout(() => save(true), 350); }
   };
   t.addEventListener('input', upd);
   b.addEventListener('input', () => { autoGrow(b); upd(); });
@@ -923,7 +928,7 @@ function openMemo(id) {
       if (two === '☐ ' || two === '☑ ') { b.setRangeText(two === '☐ ' ? '☑ ' : '☐ ', ls, ls + 2, 'preserve'); upd(); }
     }
   });
-  $('#mSec')?.addEventListener('change', (e) => { m.sectionId = e.target.value; upd(); $('.crumb').innerHTML = secName(m.sectionId); });
+  $('#mSec')?.addEventListener('change', (e) => { m.sectionId = e.target.value; upd(); if (!isNew) $('.crumb').innerHTML = secName(m.sectionId); });
   $$('.fmt-bar button').forEach((btn) => btn.addEventListener('click', () => {
     const k = btn.dataset.ins;
     const tpl = {
@@ -1265,9 +1270,9 @@ function routineModal(id, secId) {
 }
 
 /* ───────── actions ───────── */
-function newMemo(secId, body = '') {
+function newMemo(secId, body = '', draft = false) {
   const m = { id: uid(), sectionId: secId, title: '', body, pinned: false, created: Date.now(), updated: Date.now() };
-  S.memos.push(m); save(true);
+  if (!draft) { S.memos.push(m); save(true); }
   return m;
 }
 function quickNewMemo() {
@@ -1275,7 +1280,7 @@ function quickNewMemo() {
   if (!sec) { sec = { id: uid(), name: 'Memo', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
   history.replaceState(null, '', `#s-${sec.id}`);
   view = { name: 'section', id: sec.id }; render();
-  openMemo(newMemo(sec.id).id);
+  openMemo(null, newMemo(sec.id, '', true));
 }
 
 const actions = {
@@ -1308,10 +1313,22 @@ const actions = {
   'modal-yes': () => closeModal(true),
   'modal-no': () => closeModal(false),
 
-  'new-memo': (el) => openMemo(newMemo(el.dataset.sec).id),
+  'new-memo': (el) => openMemo(null, newMemo(el.dataset.sec, '', true)),
+  'memo-done': () => {
+    const { item, isNew } = sheetCtx; const has = item.title.trim() || item.body.trim();
+    closeSheet(); if (has) toast(isNew ? 'Memo saved ✓' : 'Saved ✓');
+  },
+  'memo-cancel': async () => {
+    const ctx = sheetCtx;
+    if (ctx.isNew && (ctx.item.title.trim() || ctx.item.body.trim())) {
+      if (!(await ask('Discard this memo?', 'What you wrote won\'t be saved.', 'Discard', true))) return;
+      ctx.discard = true;
+    }
+    closeSheet();
+  },
   'open-memo': (el) => openMemo(el.dataset.id),
   'pin-memo': (el) => {
-    const m = S.memos.find((x) => x.id === sheetCtx.id); m.pinned = !m.pinned; save(true);
+    const m = sheetCtx.item; m.pinned = !m.pinned; if (!sheetCtx.isNew) save(true);
     el.innerHTML = svgPin(m.pinned); el.style.color = m.pinned ? 'var(--g-600)' : 'inherit';
     toast(m.pinned ? 'Pinned to top' : 'Unpinned');
   },
