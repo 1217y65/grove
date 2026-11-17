@@ -1,0 +1,152 @@
+/* 나의 숲 — Service Worker */
+const VERSION = 'grove-v1.0.0';
+const SHELL = [
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/maskable-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png',
+  './icons/badge-96.png',
+];
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// 앱 파일: 캐시 우선 + 백그라운드 갱신 / 페이지 이동: 네트워크 우선, 오프라인이면 캐시
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(VERSION).then((c) => c.put('./index.html', copy));
+        return res;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  const sameOrigin = url.origin === self.location.origin;
+  const isFont = url.hostname === 'cdn.jsdelivr.net';
+  if (!sameOrigin && !isFont) return;
+
+  e.respondWith(
+    caches.match(req).then((cached) => {
+      const net = fetch(req).then((res) => {
+        if (res && (res.ok || res.type === 'opaque')) {
+          const copy = res.clone();
+          caches.open(VERSION).then((c) => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => cached);
+      return cached || net;
+    })
+  );
+});
+
+// 알림 클릭 → 앱 열기
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || './#today';
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if ('focus' in c) {
+        c.postMessage({ type: 'goto', hash: '#today' });
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(target);
+  })());
+});
+
+/* ── 백그라운드 루틴 확인 (안드로이드 크롬, 설치된 앱에서만 동작) ── */
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('grove', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function kv(key, val) {
+  const db = await idb();
+  return new Promise((res) => {
+    const tx = db.transaction('kv', val === undefined ? 'readonly' : 'readwrite');
+    const st = tx.objectStore('kv');
+    if (val === undefined) { const g = st.get(key); g.onsuccess = () => res(g.result); g.onerror = () => res(null); }
+    else { st.put(val, key); tx.oncomplete = () => res(); tx.onerror = () => res(); }
+  });
+}
+const pad = (n) => String(n).padStart(2, '0');
+const dkey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+async function checkRoutines() {
+  const s = await kv('sched');
+  if (!s || !s.notify) return;
+  const now = new Date();
+  const today = dkey(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const done = (s.checks && s.checks[today]) || [];
+  const page = s.notified && s.notified.date === today ? s.notified.ids || [] : [];
+  let sent = (await kv('swNotified')) || {};
+  if (sent.date !== today) sent = { date: today, ids: [], reminded: false };
+
+  const todays = (s.routines || []).filter((r) => r.days.includes(now.getDay()));
+  for (const r of todays) {
+    if (!r.time || done.includes(r.id) || page.includes(r.id) || sent.ids.includes(r.id)) continue;
+    const diff = nowMin - toMin(r.time);
+    if (diff >= 0 && diff <= 60) {
+      await self.registration.showNotification(`${r.icon || '🌱'} ${r.name}`, {
+        body: `${r.time} · 루틴할 시간이에요!`, tag: `r-${r.id}-${today}`,
+        icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
+      });
+      sent.ids.push(r.id);
+    }
+  }
+  if (s.remind && s.remindAt && !sent.reminded && !(s.notified && s.notified.date === today && s.notified.reminded)) {
+    const diff = nowMin - toMin(s.remindAt);
+    if (diff >= 0 && diff <= 90) {
+      const left = todays.filter((r) => !done.includes(r.id));
+      if (left.length) {
+        await self.registration.showNotification('🌙 오늘의 루틴', {
+          body: `${left.length}개 남았어요: ${left.slice(0, 3).map((r) => r.name).join(', ')}`,
+          tag: `remind-${today}`, icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
+        });
+      }
+      sent.reminded = true;
+    }
+  }
+  await kv('swNotified', sent);
+}
+
+self.addEventListener('periodicsync', (e) => {
+  if (e.tag === 'routine-check') e.waitUntil(checkRoutines());
+});
+
+// (선택) 나중에 푸시 서버를 붙이면 이 핸들러가 알림을 띄워요
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || '🌿 나의 숲', {
+    body: d.body || '오늘의 루틴을 확인해보세요', icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './#today' },
+  }));
+});
