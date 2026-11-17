@@ -137,7 +137,9 @@ function migrateV2(d) {
 
 let saveTimer;
 function save(quiet) {
+  const changed = typeof stampChanges === 'function' ? stampChanges() : false;
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Storage is full'); }
+  if (changed) schedulePush();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(syncSchedule, 400);
   if (!quiet) renderSidebar();
@@ -802,6 +804,19 @@ function renderSettings() {
   const permText = perm === 'granted' ? 'allowed' : perm === 'denied' ? 'blocked — allow it in browser settings' : perm === 'unsupported' ? 'not supported in this browser' : 'not yet allowed';
   return `
     <div class="page-head"><div class="page-icon">⚙️</div><div class="grow"><h1 class="page-title">Settings</h1><div class="page-sub">Lock · Notifications · Install · Backup</div></div></div>
+
+    <div class="section-title">☁️ Sync</div>
+    <div class="card">
+      <div class="set-row">
+        <div class="s-text"><div class="s-title">Sync across devices</div><div class="s-desc" id="syncStatus">${syncStatusText()}</div></div>
+        ${SY ? '<button class="btn btn-ghost btn-sm" data-act="sync-now">Sync now</button>' : '<button class="btn btn-primary btn-sm" data-act="sync-setup">Set up</button>'}
+      </div>
+      ${SY ? `<div class="set-row">
+        <div class="s-text"><div class="s-title">Turn off sync on this device</div><div class="s-desc">Your records stay here and in the cloud</div></div>
+        <button class="btn btn-ghost btn-sm" data-act="sync-off">Turn off</button>
+      </div>` : ''}
+    </div>
+    <div class="note">${SY ? '☁️ Same phrase on every device = same Grove everywhere. Changes sync automatically when you open the app and a few seconds after you edit.' : '☁️ Turn this on to keep the same Grove on your phone, computer and every browser — records from each device are merged, nothing is lost.'}</div>
 
     <div class="section-title">🔒 App lock</div>
     <div class="card">
@@ -1476,6 +1491,12 @@ const actions = {
     S.settings.notify = true; save(); render(); registerPeriodic();
     toast('Routine reminders on 🔔');
   },
+  'sync-setup': () => syncModal(),
+  'sync-now': () => { syncNow(); },
+  'sync-off': async () => {
+    if (!(await ask('Turn off sync here?', 'This device stops syncing. Your records stay on this device and in the cloud; enter the same phrase again any time to reconnect.', 'Turn off'))) return;
+    SY = null; syncCK = null; saveSY(); render(); toast('Sync off on this device');
+  },
   'toggle-lock': () => pinModal(lockOn() ? 'off' : 'set'),
   'change-pin': () => pinModal('change'),
   'lock-after': (el) => { S.settings.lock.after = +el.dataset.v; save(); render(); },
@@ -1502,7 +1523,8 @@ const actions = {
   reset: async () => {
     if (!(await ask('Erase everything?', 'All memos, plans, routines and check-ins will be deleted.', 'Erase all', true))) return;
     imgOp('readwrite', (st) => st.clear()).catch(() => {}); IMG.urls.clear();
-    S = seed(); save(); toast('Reset complete'); go('#today');
+    SY = null; syncCK = null; saveSY();
+    S = seed(); initStamps(); save(); toast('Reset complete'); go('#today');
   },
 };
 function closeDrawer() { $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('open'); }
@@ -1557,7 +1579,7 @@ document.addEventListener('change', async (e) => {
       if (!(await ask('Restore this backup?', `${data.sections.length} sections, ${(data.memos || []).length} memos, ${(data.plans || []).length} plans and ${(data.routines || []).length} routines will replace your current data.`, 'Restore'))) return;
       const images = data.images || {}; delete data.images;
       for (const [iid, url] of Object.entries(images)) { try { await imgPut(iid, await (await fetch(url)).blob()); } catch (_) {} }
-      S = normalize(data); save(); toast('Backup restored'); go('#today');
+      S = normalize(data); initStamps(); S._at = Date.now(); save(); schedulePush(); toast('Backup restored'); go('#today');
     } catch (_) { toast('That doesn\'t look like a Grove backup'); }
     e.target.value = '';
   }
@@ -1571,6 +1593,224 @@ let toastTm;
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTm); toastTm = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ───────── Cloud sync (end-to-end encrypted, via /api/sync + Vercel Blob) ───────── */
+const SYNC_KEY = 'grove-sync';
+const SYNC_COLS = ['sections', 'memos', 'plans', 'routines', 'inspos', 'faith'];
+const SAMPLE_TITLES = new Set(['Welcome to Grove 🌿', 'Explore Grove', 'Drink a glass of water', 'Daily reflection', 'The best time to plant a tree was 20 years ago. The second best time is now.']);
+let SY = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)); } catch (_) { return null; } })();
+const saveSY = () => { try { if (SY) localStorage.setItem(SYNC_KEY, JSON.stringify(SY)); else localStorage.removeItem(SYNC_KEY); } catch (_) {} };
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const toB64 = (buf) => { let s = ''; new Uint8Array(buf).forEach((b) => { s += String.fromCharCode(b); }); return btoa(s); };
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function syncDerive(pass) {
+  const enc = new TextEncoder();
+  const id = hex(await crypto.subtle.digest('SHA-256', enc.encode('grove-sync-id:' + pass)));
+  const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode('grove-sync-salt:' + id), iterations: 250000, hash: 'SHA-256' }, base, 256);
+  return { id, k: toB64(bits) };
+}
+let syncCK = null;
+const sKey = async () => (syncCK ||= await crypto.subtle.importKey('raw', fromB64(SY.k), 'AES-GCM', false, ['encrypt', 'decrypt']));
+async function seal(bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await sKey(), bytes));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12); return out;
+}
+async function unseal(buf) { const u = new Uint8Array(buf); return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, await sKey(), u.slice(12)); }
+
+/* change tracking: every item gets _u (last change), deletions leave tombstones in S._t, check toggles in S._ck */
+let seenItems = null, seenCk = null;
+const itemJSON = (it) => { const { _u, ...rest } = it; return JSON.stringify(rest); };
+const ckSet = () => { const s = new Set(); for (const [d, arr] of Object.entries(S.checks || {})) for (const r of arr) s.add(`${d}|${r}`); return s; };
+function snapshotSeen() {
+  seenItems = new Map(); for (const c of SYNC_COLS) for (const it of S[c] || []) seenItems.set(it.id, itemJSON(it));
+  seenCk = ckSet();
+}
+function initStamps() {
+  S._t ||= {}; S._ck ||= {};
+  for (const c of SYNC_COLS) for (const it of S[c] || []) it._u ||= it.updated || it.created || 1;
+  for (const k of ckSet()) if (!(k in S._ck)) S._ck[k] = 1;
+  const old = Date.now() - 200 * 864e5; for (const [k, t] of Object.entries(S._t)) if (t < old) delete S._t[k];
+  snapshotSeen();
+}
+function stampChanges() {
+  if (!seenItems) { initStamps(); return false; }
+  const now = Date.now(); let changed = false; const cur = new Set();
+  for (const c of SYNC_COLS) for (const it of S[c] || []) {
+    cur.add(it.id);
+    const js = itemJSON(it);
+    if (seenItems.get(it.id) !== js) { it._u = now; changed = true; seenItems.set(it.id, js); }
+  }
+  for (const id of [...seenItems.keys()]) if (!cur.has(id)) { S._t[id] = now; seenItems.delete(id); changed = true; }
+  const ck = ckSet();
+  for (const k of ck) if (!seenCk.has(k)) { S._ck[k] = now; changed = true; }
+  for (const k of seenCk) if (!ck.has(k)) { S._ck[k] = -now; changed = true; }
+  seenCk = ck;
+  if (changed) S._at = now;
+  return changed;
+}
+
+function mergeState(L, R) {
+  const now = Date.now();
+  const tomb = { ...(R._t || {}) }; for (const [id, t] of Object.entries(L._t || {})) tomb[id] = Math.max(tomb[id] || 0, t);
+  const out = { ...L };
+  for (const c of SYNC_COLS) {
+    const map = new Map();
+    const add = (it) => { const o = map.get(it.id); if (!o || (it._u || 0) > (o._u || 0)) map.set(it.id, it); };
+    (R[c] || []).forEach(add); (L[c] || []).forEach(add);
+    out[c] = [...map.values()].filter((it) => !((tomb[it.id] || 0) >= (it._u || 0)));
+  }
+  // keep section order from whichever side changed last
+  const order = ((R._at || 0) > (L._at || 0) ? R : L).sections || [];
+  const pos = (id) => { const i = order.findIndex((s) => s.id === id); return i < 0 ? 1e9 : i; };
+  out.sections.sort((a, b) => pos(a.id) - pos(b.id) || (a.created || 0) - (b.created || 0));
+  // the same section created separately on two devices (e.g. "Memo") → fold into one
+  const canon = new Map(), remap = {};
+  for (const s of [...out.sections].sort((a, b) => (a.created || 0) - (b.created || 0))) {
+    const key = `${s.type}|${s.name.trim().toLowerCase()}`;
+    const keep = canon.get(key);
+    if (!keep) { canon.set(key, s); continue; }
+    remap[s.id] = keep.id; tomb[s.id] = now;
+    if (s.type === 'plan') {
+      keep.groups ||= [];
+      for (const g of s.groups || []) {
+        const same = keep.groups.find((x) => x.name.trim().toLowerCase() === g.name.trim().toLowerCase());
+        if (same) remap[g.id] = same.id; else keep.groups.push(g);
+      }
+      keep._u = now;
+    }
+  }
+  if (Object.keys(remap).length) {
+    out.sections = out.sections.filter((s) => !remap[s.id]);
+    for (const c of SYNC_COLS.slice(1)) for (const it of out[c]) {
+      if (remap[it.sectionId]) { it.sectionId = remap[it.sectionId]; it._u = now; }
+      if (it.groupId && remap[it.groupId]) { it.groupId = remap[it.groupId]; it._u = now; }
+    }
+  }
+  // starter samples that exist on both devices → keep one
+  for (const c of SYNC_COLS.slice(1)) {
+    const seen = new Map();
+    out[c] = out[c].filter((it) => {
+      const t = it.title || it.name || it.text || '';
+      if (!SAMPLE_TITLES.has(t)) return true;
+      const key = `${it.sectionId}|${t}`;
+      if (seen.has(key)) { tomb[it.id] = now; return false; }
+      seen.set(key, it); return true;
+    });
+  }
+  // routine check-ins: newest toggle wins
+  const ck = { ...(R._ck || {}) }; for (const [k, t] of Object.entries(L._ck || {})) if (Math.abs(t) > Math.abs(ck[k] || 0)) ck[k] = t;
+  for (const src of [L.checks || {}, R.checks || {}]) for (const [d, arr] of Object.entries(src)) for (const r of arr) if (!(`${d}|${r}` in ck)) ck[`${d}|${r}`] = 1;
+  const checks = {};
+  for (const [k, t] of Object.entries(ck)) if (t > 0) { const [d, r] = k.split('|'); (checks[d] ||= []).push(r); }
+  Object.assign(out, { checks, _ck: ck, _t: tomb, _at: Math.max(L._at || 0, R._at || 0), v: Math.max(L.v || 0, R.v || 0) });
+  return out;
+}
+const syncPayload = () => { const p = { v: S.v, checks: S.checks, _t: S._t, _ck: S._ck, _at: S._at || 0 }; for (const c of SYNC_COLS) p[c] = S[c]; return p; };
+const syncedJSON = (o) => JSON.stringify(SYNC_COLS.map((c) => o[c]).concat([o.checks]));
+
+let syncBusy = false, syncAgain = false, pushTimer = null;
+function setSyncStatus(st) {
+  if (SY) { SY.state = st; }
+  const el = $('#syncStatus'); if (el) el.innerHTML = syncStatusText();
+  const dot = $('#syncDot'); if (dot) dot.className = `sync-dot ${st || ''}`;
+}
+function syncStatusText() {
+  if (!SY) return 'Off';
+  if (SY.state === 'syncing') return 'Syncing…';
+  if (SY.err === 'storage-not-connected') return '⚠️ Cloud storage isn\'t connected yet';
+  if (SY.err) return `⚠️ Couldn't sync (${esc(SY.err)}) — will retry`;
+  return SY.last ? `Synced ${relTime(SY.last)}` : 'Waiting for first sync';
+}
+async function syncNow() {
+  if (!SY || !navigator.onLine) return;
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true; setSyncStatus('syncing');
+  try {
+    const url = `/api/sync?id=${SY.id}`;
+    const r = await fetch(url, { cache: 'no-store' });
+    let etag = null;
+    if (r.status === 503) throw new Error('storage-not-connected');
+    if (r.status === 200) {
+      etag = r.headers.get('x-grove-etag') || r.headers.get('etag');
+      let remote;
+      try { remote = JSON.parse(new TextDecoder().decode(await unseal(await r.arrayBuffer()))); } catch (_) { throw new Error('wrong-phrase'); }
+      stampChanges();
+      if (SY.fresh) {
+        // a device joining existing data: drop its untouched starter samples so they don't come back
+        const untouched = (it) => SAMPLE_TITLES.has(it.title || it.name || it.text || '') && !(it.updated && it.updated !== it.created);
+        for (const c of SYNC_COLS.slice(1)) S[c] = S[c].filter((it) => !untouched(it));
+        snapshotSeen();
+      }
+      const merged = mergeState(S, remote);
+      const changed = syncedJSON(merged) !== syncedJSON(S);
+      S = { ...merged, settings: S.settings };
+      snapshotSeen();
+      try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
+      if (changed && !$('#sheet').classList.contains('open') && !$('#modal').classList.contains('open')) render();
+      else if (changed) renderSidebar();
+    } else if (r.status !== 404) throw new Error(`HTTP ${r.status}`);
+    const body = await seal(new TextEncoder().encode(JSON.stringify(syncPayload())));
+    const p = await fetch(url, { method: 'PUT', body, headers: etag ? { 'if-match': etag } : {} });
+    if (p.status === 412) syncAgain = true;
+    else if (p.status === 503) throw new Error('storage-not-connected');
+    else if (!p.ok) throw new Error(`HTTP ${p.status}`);
+    await syncImages();
+    SY.last = Date.now(); SY.err = ''; SY.fresh = false;
+  } catch (e) {
+    SY.err = e.message || String(e);
+  } finally {
+    syncBusy = false; saveSY(); setSyncStatus(SY?.err ? 'error' : 'ok');
+    if (syncAgain && SY) { syncAgain = false; setTimeout(syncNow, 800); }
+  }
+}
+async function syncImages() {
+  SY.imgs ||= [];
+  const ids = [...new Set(S.inspos.map((x) => x.img).filter(Boolean))];
+  for (const id of ids) {
+    const local = await imgGet(id).catch(() => null);
+    if (local && !SY.imgs.includes(id)) {
+      const body = await seal(new Uint8Array(await local.arrayBuffer()));
+      const r = await fetch(`/api/sync?id=${SY.id}&img=${id}`, { method: 'PUT', body });
+      if (r.ok) SY.imgs.push(id);
+    } else if (!local) {
+      const r = await fetch(`/api/sync?id=${SY.id}&img=${id}`, { cache: 'no-store' });
+      if (r.ok) {
+        try { await imgPut(id, new Blob([await unseal(await r.arrayBuffer())], { type: 'image/jpeg' })); if (!SY.imgs.includes(id)) SY.imgs.push(id); hydrateImgs(); } catch (_) {}
+      }
+    }
+  }
+}
+function schedulePush() { if (!SY) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncNow, 2500); }
+
+function syncModal() {
+  openModal(`
+    <h3>Sync across devices</h3>
+    <p class="desc">Pick a <b>sync phrase</b> and enter the same phrase on your phone, computer and every browser. Everything you write merges together and stays up to date.</p>
+    <div class="field"><label>Sync phrase</label><input class="input" id="syP1" type="password" autocomplete="new-password" placeholder="At least 8 characters" /></div>
+    <div class="field"><label>Type it again</label><input class="input" id="syP2" type="password" autocomplete="new-password" /></div>
+    <div class="note" style="margin:0 0 12px">🔐 Your records are encrypted on this device with the phrase before they leave it — nobody, including the server, can read them. The phrase can't be recovered, so write it down somewhere safe.</div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button><button class="btn btn-primary" id="sySave">Connect</button></div>`);
+  setTimeout(() => $('#syP1')?.focus(), 50);
+  $('#sySave').addEventListener('click', async () => {
+    const a = $('#syP1').value, b = $('#syP2').value;
+    if (a.length < 8) { $('#syP1').focus(); return toast('Use at least 8 characters'); }
+    if (a !== b) { $('#syP2').value = ''; $('#syP2').focus(); return toast('The phrases don\'t match'); }
+    const btn = $('#sySave'); btn.disabled = true; btn.textContent = 'Connecting…';
+    try {
+      const ping = await fetch('/api/sync?ping=1', { cache: 'no-store' }).then((r) => r.json()).catch(() => null);
+      if (!ping?.ready) { btn.disabled = false; btn.textContent = 'Connect'; return toast('Cloud storage isn\'t connected to the site yet'); }
+      SY = { ...(await syncDerive(a)), imgs: [], last: 0, err: '', fresh: true }; syncCK = null; saveSY();
+      closeModal(); render(); toast('Syncing…');
+      await syncNow();
+      if (SY?.err === 'wrong-phrase') { toast('That phrase doesn\'t match your saved data'); }
+      else if (SY && !SY.err) toast('Sync is on ☁️');
+      render();
+    } catch (e) { btn.disabled = false; btn.textContent = 'Connect'; toast('Couldn\'t connect — try again'); }
+  });
 }
 
 /* ───────── App lock (PIN) ───────── */
@@ -1636,7 +1876,8 @@ async function lockForgot() {
   if (!ok) return;
   try { localStorage.removeItem(KEY); } catch (_) {}
   try { await imgOp('readwrite', (st) => st.clear()); } catch (_) {}
-  S = seed(); save(true); unlock(); go('#today'); toast('Grove was reset');
+  SY = null; syncCK = null; saveSY();
+  S = seed(); initStamps(); save(true); unlock(); go('#today'); toast('Grove was reset');
 }
 document.addEventListener('keydown', (e) => {
   if (!lockState.open || $('#modal').classList.contains('open')) return;
@@ -1773,6 +2014,11 @@ setInterval(heartbeat, 20000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { heartbeat(); if (!$('#sheet').classList.contains('open') && !$('#modal').classList.contains('open')) render(); } });
 
 /* boot */
+initStamps();
+if (SY) setTimeout(syncNow, 600);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+window.addEventListener('online', () => syncNow());
+setInterval(() => { if (!document.hidden) syncNow(); }, 120000);
 if (lockOn()) showLock();
 if (location.hash === '#new-memo') { render(); quickNewMemo(); }
 else { view = parseHash(); render(); }

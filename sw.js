@@ -1,5 +1,5 @@
 /* Grove — Service Worker */
-const VERSION = 'grove-v1.9.1';
+const VERSION = 'grove-v2.0.0';
 const SHELL = [
   './',
   './index.html',
@@ -44,6 +44,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   const sameOrigin = url.origin === self.location.origin;
+  if (sameOrigin && url.pathname.startsWith('/api/')) return; // never cache sync traffic
   const isFont = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname);
   if (!sameOrigin && !isFont) return;
 
