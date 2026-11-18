@@ -26,6 +26,7 @@ const TYPES = {
   routine: { icon: '🌱', label: 'Routine', desc: 'Daily habits' },
   inspo: { icon: '✨', label: 'Inspiration', desc: 'Films · Books · Quotes' },
   faith: { icon: '🙏', label: 'Faith', desc: 'QT · Prayer · Verses' },
+  words: { icon: '📒', label: 'Words', desc: '한글 · English' },
 };
 const KINDS = {
   film: { icon: '🎬', label: 'Film', who: 'Director', title: 'Title' },
@@ -62,12 +63,14 @@ function seed() {
   const routine = s('Routine', '🌱', 'routine');
   const inspo = s('Inspiration', '✨', 'inspo');
   const faith = s('Faith', '🙏', 'faith');
+  const words = s('Words', '📒', 'words');
   const now = Date.now();
   return {
-    v: 4,
+    v: 5,
     _pristine: true,
-    sections: [memo, plan, routine, inspo, faith],
+    sections: [memo, plan, routine, inspo, faith, words],
     faith: [],
+    words: [],
     inspos: [
       { id: uid(), sectionId: inspo.id, kind: 'quote', text: 'The best time to plant a tree was 20 years ago. The second best time is now.', title: '', who: 'Proverb', note: '', rating: 0, date: dkey(), created: now, updated: now },
     ],
@@ -75,7 +78,7 @@ function seed() {
       {
         id: uid(), sectionId: memo.id, pinned: true, created: now, updated: now,
         title: 'Welcome to Grove 🌿',
-        body: '• Five spaces to grow in:\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n  - Inspiration: films, books, quotes\n  - Faith: QT, prayer, verses\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
+        body: '• Six spaces to grow in:\n  - Memo: notes, thoughts, journaling, ideas\n  - Plan: tasks, goals, projects\n  - Routine: daily or weekly habits\n  - Inspiration: films, books, quotes\n  - Faith: QT, prayer, verses\n  - Words: 한글 · English 단어장\n\n• Give a routine a time and turn on notifications in Settings to get reminded.\n• On your phone, "Add to Home Screen" to use Grove like an app.\n\nFeel free to delete this memo.',
       },
     ],
     plans: [
@@ -104,7 +107,7 @@ function load() {
   return seed();
 }
 function normalize(d) {
-  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.checks ||= {};
+  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.words ||= []; d.checks ||= {};
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
   if ((d.v || 1) < 2) migrateV2(d);
   if (d.v < 3) {
@@ -114,6 +117,10 @@ function normalize(d) {
   if (d.v < 4) {
     if (!d.sections.some((s) => s.type === 'faith')) d.sections.push({ id: uid(), name: 'Faith', icon: '🙏', type: 'faith', created: Date.now() });
     d.v = 4;
+  }
+  if (d.v < 5) {
+    if (!d.sections.some((s) => s.type === 'words')) d.sections.push({ id: uid(), name: 'Words', icon: '📒', type: 'words', created: 1763510000000 });
+    d.v = 5;
   }
   d.sections.forEach((s) => { if (s.type === 'plan') s.groups ||= []; });
   d.routines.forEach((r) => { if (!Array.isArray(r.times)) r.times = r.time ? [r.time] : []; delete r.time; });
@@ -220,7 +227,7 @@ function parseHash() {
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#new-memo') return quickNewMemo();
-  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; }
+  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; view.wlang = prev.wlang; view.wsort = prev.wsort; view.whide = prev.whide; view.wstar = prev.wstar; }
   if (view.name !== 'section' || !navOpen.has(view.id)) navOpen.clear();
   if (view.name === 'section' && view.group) navOpen.add(view.id);
   if (keepDrawer) keepDrawer = false; else closeDrawer();
@@ -241,7 +248,7 @@ function render() {
     title = `${sec.icon} ${sec.name}`;
     const grp = sec.type === 'plan' && view.group ? (sec.groups || []).find((g) => g.id === view.group) : null;
     if (grp) title = `${grp.icon} ${grp.name}`;
-    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : sec.type === 'faith' ? renderFaithSection(sec) : renderRoutineSection(sec);
+    main.innerHTML = sec.type === 'memo' ? renderMemoSection(sec) : sec.type === 'plan' ? renderPlanSection(sec) : sec.type === 'inspo' ? renderInspoSection(sec) : sec.type === 'faith' ? renderFaithSection(sec) : sec.type === 'words' ? renderWordsSection(sec) : renderRoutineSection(sec);
   }
   hydrateImgs(main);
   $('#topbarTitle').textContent = title;
@@ -253,6 +260,7 @@ function renderSidebar() {
   const active = (n, id, g) => (view.name === n && (!id || view.id === id) && (g === undefined || (view.group || null) === g) ? ' active' : '');
   const count = (s) => s.type === 'memo' ? S.memos.filter((m) => m.sectionId === s.id).length
     : s.type === 'inspo' ? S.inspos.filter((x) => x.sectionId === s.id).length
+    : s.type === 'words' ? S.words.filter((x) => x.sectionId === s.id).length
     : s.type === 'faith' ? (S.faith.filter((x) => x.sectionId === s.id && x.kind === 'prayer' && !x.answered).length || '')
     : s.type === 'plan' ? S.plans.filter((p) => p.sectionId === s.id && !p.done).length
       : (() => { const rs = S.routines.filter((r) => r.sectionId === s.id && isOn(r)); return rs.length ? `${rs.filter((r) => isChecked(r.id)).length}/${rs.length}` : ''; })();
@@ -760,6 +768,100 @@ function openFaith(id, draft) {
   if (isNew) setTimeout(() => ($('#fPassage') || $('#fTitle') || $('#fText'))?.focus(), 280);
 }
 
+/* ── Words (vocabulary notebook) ── */
+const WLANG = { ko: { flag: '🇰🇷', label: '한글', wordPh: '단어', meanPh: '뜻', exPh: '예문' }, en: { flag: '🇺🇸', label: 'English', wordPh: 'Word', meanPh: 'Meaning', exPh: 'Example sentence' } };
+function wordRow(w, hide) {
+  return `<div class="w-row${w.star ? ' starred' : ''}${hide ? ' hidden-mean' : ''}" data-wid="${w.id}">
+    <button class="w-star" data-act="word-star" data-id="${w.id}" aria-label="Star">${w.star ? '★' : '☆'}</button>
+    <button class="w-body" data-act="${hide ? 'word-reveal' : 'open-word'}" data-id="${w.id}">
+      <div class="w-head"><span class="w-word">${esc(w.word)}</span>${w.pron ? `<span class="w-pron">${esc(w.pron)}</span>` : ''}</div>
+      <div class="w-mean">${esc(w.meaning) || '<i>—</i>'}</div>
+      ${w.example ? `<div class="w-ex">${esc(w.example)}</div>` : ''}
+    </button>
+  </div>`;
+}
+function renderWordsSection(sec) {
+  const lang = WLANG[view.wlang] ? view.wlang : 'ko';
+  const L = WLANG[lang];
+  const all = S.words.filter((w) => w.sectionId === sec.id);
+  const mine = all.filter((w) => w.lang === lang);
+  const sort = view.wsort || 'new';
+  let ws = view.wstar ? mine.filter((w) => w.star) : mine;
+  ws = [...ws].sort(sort === 'az' ? (a, b) => a.word.localeCompare(b.word, lang === 'ko' ? 'ko' : 'en', { sensitivity: 'base' }) : (a, b) => b.created - a.created);
+  // group: by first letter for A–Z, by day for newest
+  const groups = [];
+  for (const w of ws) {
+    const key = sort === 'az' ? firstLetter(w.word, lang) : dayLabel(w.created);
+    const g = groups[groups.length - 1];
+    if (g && g.key === key) g.items.push(w); else groups.push({ key, items: [w] });
+  }
+  const hide = !!view.whide;
+  return `
+    ${sectionHead(sec, `${all.filter((w) => w.lang === 'ko').length} 한글 · ${all.filter((w) => w.lang === 'en').length} English`)}
+    <div class="tabs">${Object.entries(WLANG).map(([k, v]) => `<button class="tab${lang === k ? ' on' : ''}" data-act="word-lang" data-k="${k}">${v.flag} ${v.label} <span>${all.filter((w) => w.lang === k).length}</span></button>`).join('')}</div>
+    <form class="card w-add" data-form="quick-word" data-sec="${sec.id}" data-lang="${lang}">
+      <input name="word" placeholder="${L.wordPh}" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <span class="w-add-sep"></span>
+      <input name="meaning" placeholder="${L.meanPh}" autocomplete="off" />
+      <button class="btn btn-primary btn-sm" type="submit">Add</button>
+    </form>
+    <div class="w-tools">
+      <div class="seg"><button data-act="word-sort" data-v="new" class="${sort === 'new' ? 'on' : ''}">Newest</button><button data-act="word-sort" data-v="az" class="${sort === 'az' ? 'on' : ''}">${lang === 'ko' ? '가나다' : 'A–Z'}</button></div>
+      <button class="chip-btn${view.wstar ? ' on' : ''}" data-act="word-starred">★ Starred</button>
+      <button class="chip-btn${hide ? ' on' : ''}" data-act="word-hide">${hide ? '🙈 Meanings hidden' : '👁 Hide meanings'}</button>
+    </div>
+    ${ws.length ? `<div class="notebook">${groups.map((g) => `
+        <div class="nb-group"><div class="nb-key">${esc(g.key)}</div>${g.items.map((w) => wordRow(w, hide)).join('')}</div>`).join('')}</div>`
+      : `<div class="empty"><div class="e-icon">📒</div>${view.wstar ? 'No starred words yet' : lang === 'ko' ? '새로 알게 된 단어를 적어보세요' : 'Write down a new word you learned'}</div>`}`;
+}
+function firstLetter(word, lang) {
+  const c = (word || '').trim().charAt(0);
+  if (!c) return '#';
+  const code = c.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'[Math.floor((code - 0xac00) / 588)];
+  return /[a-z]/i.test(c) ? c.toUpperCase() : '#';
+}
+function dayLabel(ts) {
+  const k = dkey(new Date(ts)); const t = dkey();
+  if (k === t) return 'Today';
+  if (k === dkey(addDays(new Date(), -1))) return 'Yesterday';
+  const d = new Date(ts); return `${MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== new Date().getFullYear() ? ', ' + d.getFullYear() : ''}`;
+}
+const wordHas = (w) => [w.word, w.meaning, w.example, w.pron, w.note].some((v) => (v || '').trim());
+function openWord(id, draft) {
+  const w = draft || S.words.find((x) => x.id === id);
+  if (!w) return;
+  const isNew = !!draft;
+  const L = WLANG[w.lang] || WLANG.ko;
+  const upd = () => { w.updated = Date.now(); if (!isNew) save(true); };
+  openSheet(`
+    <div class="sheet-bar">
+      <button class="icon-btn" data-act="word-cancel" aria-label="${isNew ? 'Cancel' : 'Back'}">${isNew ? svgClose : svgBack}</button>
+      <div class="crumb crumb-strong">${L.flag} ${isNew ? 'New word' : L.label}</div>
+      ${isNew ? '' : `<button class="icon-btn" data-act="del-word" aria-label="Delete">${svgTrash}</button>`}
+      <button class="done-btn" data-act="word-done" aria-label="Save">${svgCheck}</button>
+    </div>
+    <div class="sheet-body"><div class="sheet-inner">
+      <div class="w-card-edit">
+        <input class="w-word-in" id="wWord" placeholder="${L.wordPh}" value="${esc(w.word)}" autocapitalize="off" spellcheck="false" />
+        <input class="i-sub-in" id="wPron" placeholder="${w.lang === 'en' ? 'Pronunciation (optional) — e.g. /ˈserəndɪpɪti/' : '한자·발음 (선택)'}" value="${esc(w.pron)}" />
+        <div class="w-line"></div>
+        <textarea class="w-mean-in" id="wMean" rows="2" placeholder="${L.meanPh}">${esc(w.meaning)}</textarea>
+      </div>
+      <div class="field" style="margin-top:18px"><label>${L.exPh}</label><textarea class="textarea" id="wEx" style="min-height:70px" placeholder="${w.lang === 'en' ? 'Use it in a sentence' : '문장으로 써보기'}">${esc(w.example)}</textarea></div>
+      <div class="field"><label>Notes</label><textarea class="textarea" id="wNote" style="min-height:70px" placeholder="${w.lang === 'en' ? 'Synonyms, where you saw it…' : '비슷한 말, 어디서 봤는지…'}">${esc(w.note)}</textarea></div>
+    </div></div>`, {
+    type: 'word', id: w.id, isNew, item: w,
+    onClose() {
+      if (isNew) { if (w.word.trim() && !this.discard) S.words.push(w); }
+      else if (!w.word.trim() && !wordHas(w)) S.words = S.words.filter((x) => x.id !== w.id);
+      save(true);
+    },
+  });
+  [['#wWord', 'word'], ['#wPron', 'pron'], ['#wMean', 'meaning'], ['#wEx', 'example'], ['#wNote', 'note']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { w[k] = e.target.value; upd(); }));
+  if (isNew) setTimeout(() => $('#wWord')?.focus(), 280);
+}
+
 /* ── Search ── */
 function hl(text, q) {
   const t = esc(text);
@@ -788,7 +890,8 @@ function searchResults(q) {
   const rs = S.routines.filter((r) => r.name.toLowerCase().includes(lq));
   const xs = S.inspos.filter((x) => [x.title, x.who, x.text, x.note].join(' ').toLowerCase().includes(lq));
   const fs = S.faith.filter((x) => [x.title, x.note, x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].join(' ').toLowerCase().includes(lq));
-  if (!ms.length && !ps.length && !rs.length && !xs.length && !fs.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
+  const wds = S.words.filter((x) => [x.word, x.meaning, x.example, x.note, x.pron].join(' ').toLowerCase().includes(lq));
+  if (!ms.length && !ps.length && !rs.length && !xs.length && !fs.length && !wds.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
     ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
       <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
@@ -799,7 +902,8 @@ function searchResults(q) {
     ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
     ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}
     ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div>${inspoBlock(xs)}` : ''}
-    ${fs.length ? `<div class="section-title">🙏 Faith <span class="count">${fs.length}</span></div><div class="list">${fs.map((x) => x.kind === 'qt' ? qtCard(x) : x.kind === 'prayer' ? prayerRow(x) : verseCard(x, true)).join('')}</div>` : ''}`;
+    ${fs.length ? `<div class="section-title">🙏 Faith <span class="count">${fs.length}</span></div><div class="list">${fs.map((x) => x.kind === 'qt' ? qtCard(x) : x.kind === 'prayer' ? prayerRow(x) : verseCard(x, true)).join('')}</div>` : ''}
+    ${wds.length ? `<div class="section-title">📒 Words <span class="count">${wds.length}</span></div><div class="notebook"><div class="nb-group">${wds.map((w) => wordRow(w)).join('')}</div></div>` : ''}`;
 }
 
 /* ── Settings ── */
@@ -1359,7 +1463,7 @@ const actions = {
   'del-section': async (el) => {
     const sec = S.sections.find((s) => s.id === el.dataset.id);
     closeModal();
-    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length + S.inspos.filter((x) => x.sectionId === sec.id).length + S.faith.filter((x) => x.sectionId === sec.id).length;
+    const n = S.memos.filter((m) => m.sectionId === sec.id).length + S.plans.filter((p) => p.sectionId === sec.id).length + S.routines.filter((r) => r.sectionId === sec.id).length + S.inspos.filter((x) => x.sectionId === sec.id).length + S.faith.filter((x) => x.sectionId === sec.id).length + S.words.filter((x) => x.sectionId === sec.id).length;
     if (!(await ask('Delete this section?', `"${esc(sec.name)}"${n ? ` and its ${n} item${n === 1 ? '' : 's'}` : ''} will be removed.`, 'Delete', true))) return;
     S.sections = S.sections.filter((s) => s.id !== sec.id);
     S.memos = S.memos.filter((m) => m.sectionId !== sec.id);
@@ -1368,6 +1472,7 @@ const actions = {
     S.inspos.filter((x) => x.sectionId === sec.id && x.img).forEach((x) => imgDel(x.img));
     S.inspos = S.inspos.filter((x) => x.sectionId !== sec.id);
     S.faith = S.faith.filter((x) => x.sectionId !== sec.id);
+    S.words = S.words.filter((x) => x.sectionId !== sec.id);
     save(); toast('Section deleted'); go('#today');
   },
   'modal-yes': () => closeModal(true),
@@ -1425,6 +1530,24 @@ const actions = {
     closeSheet();
   },
   'open-inspo': (el) => openInspo(el.dataset.id),
+  'word-lang': (el) => { view.wlang = el.dataset.k; render(); },
+  'word-sort': (el) => { view.wsort = el.dataset.v; render(); },
+  'word-starred': () => { view.wstar = !view.wstar; render(); },
+  'word-hide': () => { view.whide = !view.whide; render(); },
+  'word-reveal': (el) => { el.closest('.w-row').classList.toggle('revealed'); },
+  'word-star': (el) => { const w = S.words.find((x) => x.id === el.dataset.id); w.star = !w.star; save(); render(); },
+  'open-word': (el) => openWord(el.dataset.id),
+  'word-done': () => { const { item, isNew } = sheetCtx; const ok = item.word.trim(); closeSheet(); if (ok) toast(isNew ? 'Word added 📒' : 'Saved ✓'); },
+  'word-cancel': async () => {
+    const ctx = sheetCtx;
+    if (ctx.isNew && wordHas(ctx.item)) { if (!(await ask('Discard this word?', 'What you wrote won\'t be saved.', 'Discard', true))) return; ctx.discard = true; }
+    closeSheet();
+  },
+  'del-word': async () => {
+    const id = sheetCtx.id;
+    if (!(await ask('Delete this word?', 'This can\'t be undone.', 'Delete', true))) return;
+    S.words = S.words.filter((x) => x.id !== id); save(true); closeSheet(); toast('Deleted');
+  },
   'faith-tab': (el) => { view.ftab = el.dataset.k; render(); },
   'new-faith': (el) => {
     const kind = el.dataset.k || 'qt';
@@ -1552,6 +1675,13 @@ document.addEventListener('submit', (e) => {
     const m = newMemo(sec.id); m.title = first.slice(0, 60); m.body = rest.join('\n'); save();
     f.q.value = ''; toast(`Saved to ${sec.icon} ${sec.name}`); render();
   }
+  if (f.dataset.form === 'quick-word') {
+    const word = f.word.value.trim(), meaning = f.meaning.value.trim();
+    if (!word) { f.word.focus(); return; }
+    S.words.push({ id: uid(), sectionId: f.dataset.sec, lang: f.dataset.lang, word, meaning, pron: '', example: '', note: '', star: false, created: Date.now(), updated: Date.now() });
+    save(); render(); setTimeout(() => $('[data-form="quick-word"] input[name="word"]')?.focus(), 0);
+    return;
+  }
   if (f.dataset.form === 'quick-prayer') {
     const v = f.title.value.trim(); if (!v) return;
     S.faith.push({ id: uid(), sectionId: f.dataset.sec, kind: 'prayer', title: v, note: '', who: '', answer: '', answered: false, answeredAt: 0, date: dkey(), created: Date.now(), updated: Date.now() });
@@ -1603,7 +1733,7 @@ function toast(msg) {
 
 /* ───────── Cloud sync (end-to-end encrypted, via /api/sync + Vercel Blob) ───────── */
 const SYNC_KEY = 'grove-sync';
-const SYNC_COLS = ['sections', 'memos', 'plans', 'routines', 'inspos', 'faith'];
+const SYNC_COLS = ['sections', 'memos', 'plans', 'routines', 'inspos', 'faith', 'words'];
 const SAMPLE_TITLES = new Set(['Welcome to Grove 🌿', 'Explore Grove', 'Drink a glass of water', 'Daily reflection', 'The best time to plant a tree was 20 years ago. The second best time is now.']);
 let SY = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)); } catch (_) { return null; } })();
 const saveSY = () => { try { if (SY) localStorage.setItem(SYNC_KEY, JSON.stringify(SY)); else localStorage.removeItem(SYNC_KEY); } catch (_) {} };
