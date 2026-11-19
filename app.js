@@ -1144,7 +1144,7 @@ function openPlan(id) {
       </div>
       <div class="field"><label>Notes</label><textarea class="textarea" id="pNote" placeholder="Details, ideas, links…">${esc(p.note || '')}</textarea></div>
     </div></div>`, {
-    type: 'plan', id,
+    type: 'plan', id, item: p,
     onClose: () => { if (!p.title.trim() && !p.note && !p.steps.length) S.plans = S.plans.filter((x) => x.id !== id); save(true); },
   });
   draw();
@@ -1846,9 +1846,14 @@ function mergeState(L, R) {
   const tomb = { ...(R._t || {}) }; for (const [id, t] of Object.entries(L._t || {})) tomb[id] = Math.max(tomb[id] || 0, t);
   const out = { ...L };
   for (const c of SYNC_COLS) {
+    // local objects are kept (an open editor may be holding them); a newer remote copy is written INTO them
     const map = new Map();
-    const add = (it) => { const o = map.get(it.id); if (!o || (it._u || 0) > (o._u || 0)) map.set(it.id, it); };
-    (R[c] || []).forEach(add); (L[c] || []).forEach(add);
+    for (const it of L[c] || []) map.set(it.id, it);
+    for (const it of R[c] || []) {
+      const o = map.get(it.id);
+      if (!o) map.set(it.id, it);
+      else if ((it._u || 0) > (o._u || 0)) { for (const k of Object.keys(o)) if (!(k in it)) delete o[k]; Object.assign(o, it); }
+    }
     out[c] = [...map.values()].filter((it) => !((tomb[it.id] || 0) >= (it._u || 0)));
   }
   // keep section order from whichever side changed last
@@ -1896,6 +1901,14 @@ function mergeState(L, R) {
   for (const [k, t] of Object.entries(ck)) if (t > 0) { const [d, r] = k.split('|'); (checks[d] ||= []).push(r); }
   Object.assign(out, { checks, _ck: ck, _t: tomb, _at: Math.max(L._at || 0, R._at || 0), v: Math.max(L.v || 0, R.v || 0) });
   return out;
+}
+const SHEET_COL = { memo: 'memos', plan: 'plans', inspo: 'inspos', faith: 'faith', word: 'words' };
+function reattachOpenItem() {
+  const ctx = sheetCtx; const col = ctx && SHEET_COL[ctx.type];
+  if (!col || ctx.isNew || !ctx.item) return;
+  const arr = S[col]; const i = arr.findIndex((x) => x.id === ctx.item.id);
+  if (i < 0) arr.push(ctx.item); else if (arr[i] !== ctx.item) arr[i] = ctx.item;
+  ctx.item._u = Date.now();
 }
 const syncPayload = () => { const p = { v: S.v, checks: S.checks, _t: S._t, _ck: S._ck, _at: S._at || 0 }; for (const c of SYNC_COLS) p[c] = S[c]; return p; };
 const syncedJSON = (o) => JSON.stringify(SYNC_COLS.map((c) => o[c]).concat([o.checks]));
@@ -1946,6 +1959,7 @@ async function syncNow() {
       const merged = mergeState(S, remote);
       const changed = syncedJSON(merged) !== syncedJSON(S);
       S = { ...merged, settings: S.settings };
+      reattachOpenItem();
       snapshotSeen();
       try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
       if (changed && !$('#sheet').classList.contains('open') && !$('#modal').classList.contains('open')) render();
