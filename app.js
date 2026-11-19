@@ -771,13 +771,13 @@ function openFaith(id, draft) {
 /* ── Words (vocabulary notebook) ── */
 const WLANG = { ko: { flag: '🇰🇷', label: '한글', wordPh: '단어', meanPh: '뜻', exPh: '예문' }, en: { flag: '🇺🇸', label: 'English', wordPh: 'Word', meanPh: 'Meaning', exPh: 'Example sentence' } };
 function wordRow(w, hide) {
-  return `<div class="w-row${w.star ? ' starred' : ''}${hide ? ' hidden-mean' : ''}" data-wid="${w.id}">
-    <button class="w-star" data-act="word-star" data-id="${w.id}" aria-label="Star">${w.star ? '★' : '☆'}</button>
+  return `<div class="w-tile${w.star ? ' starred' : ''}${hide ? ' hidden-mean' : ''}" data-wid="${w.id}">
     <button class="w-body" data-act="${hide ? 'word-reveal' : 'open-word'}" data-id="${w.id}">
-      <div class="w-head"><span class="w-word">${esc(w.word)}</span>${w.pron ? `<span class="w-pron">${esc(w.pron)}</span>` : ''}</div>
-      <div class="w-mean">${esc(w.meaning) || '<i>—</i>'}</div>
-      ${w.example ? `<div class="w-ex">${esc(w.example)}</div>` : ''}
+      <span class="w-word">${esc(w.word)}</span>
+      ${w.pron ? `<span class="w-pron">${esc(w.pron)}</span>` : ''}
+      <span class="w-mean">${esc(w.meaning) || '—'}</span>
     </button>
+    <button class="w-star" data-act="word-star" data-id="${w.id}" aria-label="Star">${w.star ? '★' : '☆'}</button>
   </div>`;
 }
 function renderWordsSection(sec) {
@@ -791,7 +791,7 @@ function renderWordsSection(sec) {
   // group: by first letter for A–Z, by day for newest
   const groups = [];
   for (const w of ws) {
-    const key = sort === 'az' ? firstLetter(w.word, lang) : dayLabel(w.created);
+    const key = sort === 'az' ? `${lang === 'ko' ? '가나다' : 'A–Z'}` : dayLabel(w.created);
     const g = groups[groups.length - 1];
     if (g && g.key === key) g.items.push(w); else groups.push({ key, items: [w] });
   }
@@ -810,8 +810,9 @@ function renderWordsSection(sec) {
       <button class="chip-btn${view.wstar ? ' on' : ''}" data-act="word-starred">★ Starred</button>
       <button class="chip-btn${hide ? ' on' : ''}" data-act="word-hide">${hide ? '🙈 Meanings hidden' : '👁 Hide meanings'}</button>
     </div>
-    ${ws.length ? `<div class="notebook">${groups.map((g) => `
-        <div class="nb-group"><div class="nb-key">${esc(g.key)}</div>${g.items.map((w) => wordRow(w, hide)).join('')}</div>`).join('')}</div>`
+    ${ws.length ? groups.map((g) => `
+        <div class="nb-key">${esc(g.key)} <span>${g.items.length}</span></div>
+        <div class="w-grid">${g.items.map((w) => wordRow(w, hide)).join('')}</div>`).join('')
       : `<div class="empty"><div class="e-icon">📒</div>${view.wstar ? 'No starred words yet' : lang === 'ko' ? '새로 알게 된 단어를 적어보세요' : 'Write down a new word you learned'}</div>`}`;
 }
 function firstLetter(word, lang) {
@@ -903,7 +904,7 @@ function searchResults(q) {
     ${rs.length ? `<div class="section-title">🌱 Routines <span class="count">${rs.length}</span></div><div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>` : ''}
     ${xs.length ? `<div class="section-title">✨ Inspiration <span class="count">${xs.length}</span></div>${inspoBlock(xs)}` : ''}
     ${fs.length ? `<div class="section-title">🙏 Faith <span class="count">${fs.length}</span></div><div class="list">${fs.map((x) => x.kind === 'qt' ? qtCard(x) : x.kind === 'prayer' ? prayerRow(x) : verseCard(x, true)).join('')}</div>` : ''}
-    ${wds.length ? `<div class="section-title">📒 Words <span class="count">${wds.length}</span></div><div class="notebook"><div class="nb-group">${wds.map((w) => wordRow(w)).join('')}</div></div>` : ''}`;
+    ${wds.length ? `<div class="section-title">📒 Words <span class="count">${wds.length}</span></div><div class="w-grid">${wds.map((w) => wordRow(w)).join('')}</div>` : ''}`;
 }
 
 /* ── Settings ── */
@@ -1534,7 +1535,7 @@ const actions = {
   'word-sort': (el) => { view.wsort = el.dataset.v; render(); },
   'word-starred': () => { view.wstar = !view.wstar; render(); },
   'word-hide': () => { view.whide = !view.whide; render(); },
-  'word-reveal': (el) => { el.closest('.w-row').classList.toggle('revealed'); },
+  'word-reveal': (el) => { el.closest('.w-tile').classList.toggle('revealed'); },
   'word-star': (el) => { const w = S.words.find((x) => x.id === el.dataset.id); w.star = !w.star; save(); render(); },
   'open-word': (el) => openWord(el.dataset.id),
   'word-done': () => { const { item, isNew } = sheetCtx; const ok = item.word.trim(); closeSheet(); if (ok) toast(isNew ? 'Word added 📒' : 'Saved ✓'); },
