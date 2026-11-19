@@ -1007,6 +1007,7 @@ function closeSheet(fromPop) {
   if (!sh.classList.contains('open')) return;
   if (sheetCtx?.onClose) sheetCtx.onClose();
   sh.classList.remove('open'); sh.setAttribute('aria-hidden', 'true');
+  sh.style.height = ''; sh.style.top = ''; sh.style.bottom = '';
   document.body.style.overflow = '';
   sheetCtx = null;
   if (!fromPop && history.state?.sheet) history.back();
@@ -1256,6 +1257,56 @@ function openInspo(id, draft) {
   });
   draw();
   if (!x.title && !x.text && !x.note) setTimeout(() => (x.kind === 'quote' ? $('#iText') : x.kind === 'music' ? $('#iUrl') : $('#iTitle'))?.focus(), 280);
+}
+
+/* ───────── Writing comfort: keep the line you're typing above the keyboard (iOS-notes style) ───────── */
+const vv = window.visualViewport;
+function fitSheetToViewport() {
+  const sh = $('#sheet');
+  if (!vv || !sh.classList.contains('open')) { sh.style.height = ''; sh.style.top = ''; sh.style.bottom = ''; return; }
+  // the sheet shrinks to the space above the keyboard instead of sliding under it
+  sh.style.top = `${vv.offsetTop}px`; sh.style.height = `${vv.height}px`; sh.style.bottom = 'auto';
+}
+function caretY(ta) {
+  // mirror the textarea to find the pixel offset of the caret line
+  const cs = getComputedStyle(ta);
+  const m = document.createElement('div');
+  for (const p of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'textTransform', 'wordSpacing', 'wordBreak', 'overflowWrap', 'tabSize']) m.style[p] = cs[p];
+  Object.assign(m.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', whiteSpace: 'pre-wrap', height: 'auto' });
+  m.textContent = ta.value.slice(0, ta.selectionEnd);
+  const mark = document.createElement('span'); mark.textContent = '​'; m.appendChild(mark);
+  document.body.appendChild(m);
+  const y = mark.offsetTop, h = parseFloat(cs.lineHeight) || 24;
+  m.remove();
+  return { y, h };
+}
+function keepCaretVisible(el) {
+  const body = el?.closest('.sheet-body');
+  if (!body || document.activeElement !== el) return;
+  const viewBottom = (vv ? vv.height : window.innerHeight) - 20;
+  const bodyTop = body.getBoundingClientRect().top - (vv ? vv.offsetTop : 0);
+  let caretTop, caretBottom;
+  if (el.tagName === 'TEXTAREA') {
+    const r = el.getBoundingClientRect(); const { y, h } = caretY(el);
+    caretTop = r.top - (vv ? vv.offsetTop : 0) + y - el.scrollTop; caretBottom = caretTop + h;
+  } else { const r = el.getBoundingClientRect(); caretTop = r.top - (vv ? vv.offsetTop : 0); caretBottom = r.bottom - (vv ? vv.offsetTop : 0); }
+  const margin = 56; // room for the iOS keyboard toolbar
+  if (caretBottom > viewBottom - margin) body.scrollTop += caretBottom - (viewBottom - margin);
+  else if (caretTop < bodyTop + 12) body.scrollTop -= (bodyTop + 12) - caretTop;
+}
+let caretRaf = 0;
+const queueCaret = (el) => { cancelAnimationFrame(caretRaf); caretRaf = requestAnimationFrame(() => keepCaretVisible(el)); };
+['input', 'keyup', 'click', 'focusin'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const t = e.target;
+  if (t?.closest?.('#sheet') && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) {
+    if (ev === 'focusin') setTimeout(() => { fitSheetToViewport(); queueCaret(t); }, 320); // after the keyboard animates in
+    else queueCaret(t);
+  }
+}));
+document.addEventListener('selectionchange', () => { const a = document.activeElement; if (a?.tagName === 'TEXTAREA' && a.closest('#sheet')) queueCaret(a); });
+if (vv) {
+  const onVV = () => { fitSheetToViewport(); const a = document.activeElement; if (a?.closest?.('#sheet')) queueCaret(a); if ($('#sheet').classList.contains('open') && window.scrollY) window.scrollTo(0, 0); };
+  vv.addEventListener('resize', onVV); vv.addEventListener('scroll', onVV);
 }
 
 /* ───────── Modals ───────── */

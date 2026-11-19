@@ -738,3 +738,6 @@ body.gated .app, body.gated .toast:not(.show) { visibility: hidden; }
   .w-star { width: 26px; height: 26px; font-size: 13px; top: 4px; right: 4px; }
 }
 @media (max-width: 360px) { .w-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* v2.3: leave room below the last line so it can sit above the keyboard */
+.sheet-inner { padding-bottom: max(calc(60px + var(--sab)), 35vh); }
