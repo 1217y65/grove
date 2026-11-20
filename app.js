@@ -744,8 +744,9 @@ function hydrateImgs(root = document) {
   });
 }
 async function shrinkImage(file, max = 900) {
-  let img = await createImageBitmap(file).catch(() => null);
+  let img = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file).catch(() => null));
   if (!img) img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  if (!img.width || !img.height) throw new Error('empty image');
   const sc = Math.min(1, max / Math.max(img.width, img.height));
   const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
@@ -1639,12 +1640,26 @@ function renderPhotoCal() {
     </div>`;
 }
 function pickPhoto(cb) {
-  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
-  inp.onchange = async () => {
-    const f = inp.files[0]; if (!f) return;
-    try { const blob = await shrinkImage(f, 1100); const id = 'img-' + uid(); await imgPut(id, blob); cb(id); }
-    catch (_) { toast('Couldn\'t load that photo'); }
+  // iOS only delivers the chosen photo to a file input that is attached to the page
+  $('#photoPicker')?.remove();
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.id = 'photoPicker';
+  inp.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(inp);
+  let done = false;
+  const handle = async () => {
+    if (done) return; const f = inp.files && inp.files[0]; if (!f) return; done = true;
+    toast('Adding photo…');
+    try {
+      const blob = await shrinkImage(f, 1100);
+      const id = 'img-' + uid(); await imgPut(id, blob); cb(id);
+    } catch (err) {
+      console.warn('photo failed', err);
+      toast('Couldn\'t load that photo — try another one');
+    } finally { setTimeout(() => inp.remove(), 1000); }
   };
+  inp.addEventListener('change', handle);
+  inp.addEventListener('input', handle);
   inp.click();
 }
 function calDay(date) {
