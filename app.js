@@ -71,6 +71,7 @@ function seed() {
     sections: [memo, plan, routine, inspo, faith, words],
     faith: [],
     words: [],
+    days: [],
     pet: { name: 'Sprout', xp: 0, born: dkey(), water: {} },
     inspos: [
       { id: uid(), sectionId: inspo.id, kind: 'quote', text: 'The best time to plant a tree was 20 years ago. The second best time is now.', title: '', who: 'Proverb', note: '', rating: 0, date: dkey(), created: now, updated: now },
@@ -108,7 +109,7 @@ function load() {
   return seed();
 }
 function normalize(d) {
-  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.words ||= []; d.checks ||= {};
+  d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.words ||= []; d.days ||= []; d.checks ||= {};
   d.pet ||= { name: 'Sprout', xp: 0, born: dkey(), water: {} };
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
   if ((d.v || 1) < 2) migrateV2(d);
@@ -241,7 +242,7 @@ function render() {
   renderSidebar();
   const main = $('#main');
   let title = 'Grove';
-  if (view.name === 'today') { main.innerHTML = renderToday(); requestAnimationFrame(startGarden); }
+  if (view.name === 'today') main.innerHTML = renderToday();
   else if (view.name === 'search') { main.innerHTML = renderSearch(); title = 'Search'; }
   else if (view.name === 'settings') { main.innerHTML = renderSettings(); title = 'Settings'; }
   else if (view.name === 'section') {
@@ -328,7 +329,7 @@ function renderToday() {
       <button class="btn btn-primary btn-sm" type="submit">Save</button>
     </form>
 
-    ${renderGarden()}
+    ${renderPhotoCal()}
 
     <div class="progress-card">
       ${ring(pct)}
@@ -600,7 +601,7 @@ function renderMemoSection(sec) {
   const mine = S.memos.filter((m) => m.sectionId === sec.id);
   const notesAll = mine.filter((m) => !isScribble(m));
   const scribs = mine.filter(isScribble).sort((a, b) => b.created - a.created);
-  let notes = q ? notesAll.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(q)) : notesAll;
+  let notes = q ? notesAll.filter((m) => (m.title + ' ' + plain(m.body)).toLowerCase().includes(q)) : notesAll;
   notes = [...notes].sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
   const jot = `<form class="card jot" data-form="quick-scribble" data-sec="${sec.id}"><span>✏️</span><input name="t" placeholder="Jot something down…" autocomplete="off" /><button class="btn btn-primary btn-sm" type="submit">Add</button></form>`;
   const scribGrid = (list) => list.length ? `<div class="scribble-grid">${list.map(scribbleCard).join('')}</div>` : '<div class="empty" style="padding:22px">Short thoughts you jot down land here</div>';
@@ -640,7 +641,7 @@ function memoGrid(ms, total) {
   return `<div class="memo-grid">${ms.map((m) => `
     <button class="card memo" data-act="open-memo" data-id="${m.id}">
       <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
-      <div class="m-body">${esc(m.body)}</div>
+      <div class="m-body">${esc(plain(m.body))}</div>
       <div class="m-date">${relTime(m.updated)}</div>
     </button>`).join('')}</div>`;
 }
@@ -781,7 +782,7 @@ function posterCard(x) {
     <div class="pc-title">${esc(x.title || 'Untitled')}</div>
     ${sub ? `<div class="pc-sub">${esc(sub)}</div>` : ''}
     ${x.rating ? `<div class="pc-rate">★ ${x.rating}.0</div>` : ''}
-    ${x.note ? `<div class="pc-note">${esc(x.note)}</div>` : ''}
+    ${x.note ? `<div class="pc-note">${esc(plain(x.note))}</div>` : ''}
   </button>`;
 }
 function quoteCard(x, wide) {
@@ -789,7 +790,7 @@ function quoteCard(x, wide) {
   return `<button class="card inspo quote${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
     <div class="q-text">${esc(x.text || x.title)}</div>
     <div class="q-by">${x.who ? `— ${esc(x.who)}` : ''}${x.title && x.text ? `${x.who ? ', ' : '— '}${esc(x.title)}` : ''}</div>
-    ${x.note ? `<div class="q-note">${esc(x.note)}</div>` : ''}
+    ${x.note ? `<div class="q-note">${esc(plain(x.note))}</div>` : ''}
     ${x.kind !== 'quote' ? `<div class="i-kind">${k.icon} ${k.label}</div>` : ''}
   </button>`;
 }
@@ -827,14 +828,14 @@ function verseCard(v, wide) {
   return `<button class="card inspo quote verse${wide ? ' wide' : ''}" data-act="open-faith" data-id="${v.id}">
     <div class="q-text">${esc(v.text || v.ref)}</div>
     ${v.ref ? `<div class="q-by">${esc(v.ref)}</div>` : ''}
-    ${v.note ? `<div class="q-note">${esc(v.note)}</div>` : ''}
+    ${v.note ? `<div class="q-note">${esc(plain(v.note))}</div>` : ''}
   </button>`;
 }
 function qtCard(q) {
   return `<button class="card qt-card" data-act="open-faith" data-id="${q.id}">
     <div class="qt-top"><span class="qt-date">${fShortDate(q.date)}</span>${q.passage ? `<span class="qt-passage">${esc(q.passage)}</span>` : ''}</div>
     ${q.title ? `<div class="qt-title">${esc(q.title)}</div>` : ''}
-    ${q.note ? `<div class="qt-body">${esc(q.note)}</div>` : ''}
+    ${q.note ? `<div class="qt-body">${esc(plain(q.note))}</div>` : ''}
     ${q.apply ? `<div class="qt-apply">✔︎ ${esc(q.apply)}</div>` : ''}
   </button>`;
 }
@@ -884,7 +885,7 @@ function renderFaithSection(sec) {
     <button class="fab" data-act="new-faith" data-sec="${sec.id}" data-k="${tab}"><span style="font-size:22px;line-height:1">＋</span>${FKINDS[tab].add}</button>`;
 }
 
-const faithHas = (x) => [x.title, x.note, x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].some((v) => (v || '').trim());
+const faithHas = (x) => [x.title, plain(x.note), x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].some((v) => (v || '').trim());
 function openFaith(id, draft) {
   const x = draft || S.faith.find((i) => i.id === id);
   if (!x) return;
@@ -901,7 +902,7 @@ function openFaith(id, draft) {
         <input class="i-sub-in" id="fTitle" placeholder="Title (optional)" value="${esc(x.title)}" />
       </div>
       <label class="thought-label" for="fNote">Reflection</label>
-      <textarea class="thought-input" id="fNote" placeholder="What is God saying to me through this passage?">${esc(x.note)}</textarea>
+      ${richEditor('fNote', x.note, 'thought-input', 'What is God saying to me through this passage?')}
       <div class="field" style="margin-top:18px"><label>Application</label><textarea class="textarea" id="fApply" style="min-height:70px" placeholder="One thing I'll live out today">${esc(x.apply)}</textarea></div>
       <div class="field"><label>Prayer</label><textarea class="textarea" id="fPray" style="min-height:70px" placeholder="My prayer">${esc(x.pray)}</textarea></div>`;
   } else if (x.kind === 'prayer') {
@@ -910,7 +911,7 @@ function openFaith(id, draft) {
       <input class="i-sub-in" id="fWho" placeholder="For whom (optional)" value="${esc(x.who)}" />
       <div class="meta-line" style="margin-top:10px">Started ${fShortDate(dkey(new Date(x.created)))} · ${daysSince(x.created) + 1} day${daysSince(x.created) ? 's' : ''} of prayer</div>
       <label class="thought-label" for="fNote" style="margin-top:14px">Details</label>
-      <textarea class="thought-input" id="fNote" placeholder="What's on your heart about this?">${esc(x.note)}</textarea>
+      ${richEditor('fNote', x.note, 'thought-input', 'What\'s on your heart about this?')}
       <div class="answer-box${x.answered ? ' on' : ''}" id="fAnsBox">
         <button class="answer-toggle" id="fAns"><span class="check${x.answered ? ' on' : ''}">${svgCheck}</span>🙌 Answered</button>
         <textarea class="textarea" id="fAnswer" style="min-height:70px;${x.answered ? '' : 'display:none'}" placeholder="How was it answered?">${esc(x.answer)}</textarea>
@@ -920,7 +921,7 @@ function openFaith(id, draft) {
       <textarea class="quote-input" id="fText" rows="2" placeholder="Write the verse…">${esc(x.text)}</textarea>
       <input class="i-sub-in" id="fRef" placeholder="Reference — e.g. 시편 23:1" value="${esc(x.ref)}" style="margin-bottom:20px" />
       <label class="thought-label" for="fNote">Thoughts</label>
-      <textarea class="thought-input" id="fNote" placeholder="Why does this verse speak to you?">${esc(x.note)}</textarea>`;
+      ${richEditor('fNote', x.note, 'thought-input', 'Why does this verse speak to you?')}`;
   }
   openSheet(`
     <div class="sheet-bar">
@@ -940,8 +941,7 @@ function openFaith(id, draft) {
   const bind = (sel, key, ev = 'input', after) => $(sel)?.addEventListener(ev, (e) => { x[key] = e.target.value; after?.(e.target); upd(); });
   bind('#fDate', 'date', 'change'); bind('#fPassage', 'passage'); bind('#fTitle', 'title'); bind('#fApply', 'apply'); bind('#fPray', 'pray');
   bind('#fWho', 'who'); bind('#fAnswer', 'answer'); bind('#fText', 'text'); bind('#fRef', 'ref');
-  bind('#fNote', 'note', 'input', (el) => grow(el));
-  grow($('#fNote'));
+  bindRich($('#fNote'), (v) => { x.note = v; upd(); });
   $('#fAns')?.addEventListener('click', () => {
     x.answered = !x.answered; x.answeredAt = x.answered ? Date.now() : 0; upd();
     $('#fAnsBox').classList.toggle('on', x.answered); $('#fAns .check').classList.toggle('on', x.answered);
@@ -1068,18 +1068,18 @@ function searchResults(q) {
   q = q.trim();
   if (!q) return `<div class="empty" style="margin-top:18px">Type to search</div>`;
   const lq = q.toLowerCase();
-  const ms = S.memos.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(lq)).sort((a, b) => b.updated - a.updated);
-  const ps = S.plans.filter((p) => (p.title + ' ' + (p.note || '') + ' ' + (p.steps || []).map((s) => s.text).join(' ')).toLowerCase().includes(lq));
+  const ms = S.memos.filter((m) => (m.title + ' ' + plain(m.body)).toLowerCase().includes(lq)).sort((a, b) => b.updated - a.updated);
+  const ps = S.plans.filter((p) => (p.title + ' ' + plain(p.note || '') + ' ' + (p.steps || []).map((s) => s.text).join(' ')).toLowerCase().includes(lq));
   const rs = S.routines.filter((r) => r.name.toLowerCase().includes(lq));
-  const xs = S.inspos.filter((x) => [x.title, x.who, x.text, x.note].join(' ').toLowerCase().includes(lq));
-  const fs = S.faith.filter((x) => [x.title, x.note, x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].join(' ').toLowerCase().includes(lq));
+  const xs = S.inspos.filter((x) => [x.title, x.who, x.text, plain(x.note)].join(' ').toLowerCase().includes(lq));
+  const fs = S.faith.filter((x) => [x.title, plain(x.note), x.passage, x.apply, x.pray, x.text, x.ref, x.who, x.answer].join(' ').toLowerCase().includes(lq));
   const wds = S.words.filter((x) => [x.word, x.meaning, x.example, x.note, x.pron].join(' ').toLowerCase().includes(lq));
   if (!ms.length && !ps.length && !rs.length && !xs.length && !fs.length && !wds.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
     ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
       <button class="card memo" style="min-height:0" data-act="${m.kind === 'scribble' ? 'open-scribble' : 'open-memo'}" data-id="${m.id}">
         <div class="m-title"><span>${hl(m.title || 'Untitled', q)}</span></div>
-        <div class="m-body" style="-webkit-line-clamp:2">${hl(snippet(m.body, q), q)}</div>
+        <div class="m-body" style="-webkit-line-clamp:2">${hl(snippet(plain(m.body), q), q)}</div>
         <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
       </button>`).join('')}</div>` : ''}
     ${ps.length ? `<div class="section-title">🎯 Plans <span class="count">${ps.length}</span></div><div class="list">${ps.map((p) => planRow(p, true)).join('')}</div>` : ''}
@@ -1180,6 +1180,7 @@ function openSheet(html, ctx) {
   sheetCtx = ctx;
   const sh = $('#sheet');
   sh.innerHTML = html;
+  if ($('.rich', sh)) $('.sheet-bar', sh)?.insertAdjacentHTML('afterend', RT_BAR);
   sh.classList.add('open'); sh.setAttribute('aria-hidden', 'false');
   sh.classList.toggle('draft', !!ctx?.isNew); sh.classList.remove('editing');
   document.body.style.overflow = 'hidden';
@@ -1235,65 +1236,69 @@ function openMemo(id, draft) {
         <button data-ins="tpl-think">💭 Reflect</button>
         <button data-ins="tpl-pro">⚖️ Pros &amp; cons</button>
       </div>
-      <textarea class="body-input" id="mBody" placeholder="Start writing…">${esc(m.body)}</textarea>
+      ${richEditor('mBody', m.body, 'body-input', 'Start writing…')}
     </div></div>`, {
     type: 'memo', id: m.id, isNew, item: m,
     onClose() {
       // back gestures / Escape keep what was written; only the ✕ button discards a new memo
-      const has = m.title.trim() || m.body.trim();
+      const has = m.title.trim() || plain(m.body).trim();
       if (this.isNew) { if (has && !this.discard) S.memos.push(m); }
       else if (!has) S.memos = S.memos.filter((x) => x.id !== m.id);
       save(true);
     },
   });
   const t = $('#mTitle'), b = $('#mBody');
-  autoGrow(b);
   let tm;
   const upd = () => {
-    m.title = t.value; m.body = b.value; m.updated = Date.now();
+    m.title = t.value; m.updated = Date.now();
     if (!sheetCtx?.isNew) { clearTimeout(tm); tm = setTimeout(() => save(true), 350); }
   };
   t.addEventListener('input', upd);
-  b.addEventListener('input', () => { autoGrow(b); upd(); });
-  t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); b.focus(); } });
+  bindRich(b, (v) => { m.body = v; upd(); });
+  t.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); b.focus(); } });
+  const caretInfo = () => {
+    const sel = getSelection(); if (!sel.rangeCount) return null;
+    const r = sel.getRangeAt(0); const block = blockOf(b, r.startContainer); if (!block) return null;
+    const pre = document.createRange(); pre.setStart(block, 0); pre.setEnd(r.startContainer, r.startOffset);
+    return { block, line: pre.toString(), r };
+  };
+  const insertLines = (text) => text.split('\n').forEach((ln, i) => { if (i) document.execCommand('insertParagraph'); if (ln) document.execCommand('insertText', false, ln); });
   b.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.isComposing) return;
-    const pos = b.selectionStart;
-    const lineStart = b.value.lastIndexOf('\n', pos - 1) + 1;
-    const line = b.value.slice(lineStart, pos);
-    const mk = line.match(/^(\s*)(• |☐ |☑ |→ |- |\d+\. )/);
-    if (!mk) return;
+    if (e.key !== 'Enter' || e.isComposing || e.shiftKey) return;
+    const ci = caretInfo(); if (!ci) return;
+    const mk = ci.line.match(/^(\s*)(• |☐ |☑ |→ |- |\d+\. )/); if (!mk) return;
     e.preventDefault();
-    if (line.trim() === mk[2].trim()) { b.setRangeText('', lineStart, pos, 'end'); upd(); return; }
+    if (ci.block.textContent.trim() === mk[2].trim()) { ci.block.innerHTML = '<br>'; const r = document.createRange(); r.setStart(ci.block, 0); r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.dispatchEvent(new Event('input', { bubbles: true })); return; }
     let next = mk[2] === '☑ ' ? '☐ ' : mk[2];
     const num = mk[2].match(/^(\d+)\. $/); if (num) next = `${+num[1] + 1}. `;
-    b.setRangeText('\n' + mk[1] + next, pos, b.selectionEnd, 'end'); autoGrow(b); upd();
+    document.execCommand('insertParagraph'); document.execCommand('insertText', false, mk[1] + next);
   });
   b.addEventListener('click', () => {
-    const pos = b.selectionStart;
-    const ls = b.value.lastIndexOf('\n', pos - 1) + 1;
-    if (pos - ls <= 2) {
-      const two = b.value.slice(ls, ls + 2);
-      if (two === '☐ ' || two === '☑ ') { b.setRangeText(two === '☐ ' ? '☑ ' : '☐ ', ls, ls + 2, 'preserve'); upd(); }
+    const ci = caretInfo(); if (!ci || ci.line.length > 2) return;
+    const tw = document.createTreeWalker(ci.block, NodeFilter.SHOW_TEXT); const tn = tw.nextNode();
+    if (tn && /^[☐☑]/.test(tn.nodeValue) && ci.block.textContent.startsWith(tn.nodeValue.slice(0, 1))) {
+      tn.nodeValue = (tn.nodeValue[0] === '☐' ? '☑' : '☐') + tn.nodeValue.slice(1);
+      b.dispatchEvent(new Event('input', { bubbles: true }));
     }
   });
   $('#mSec')?.addEventListener('change', (e) => { m.sectionId = e.target.value; upd(); if (!isNew) $('.crumb').innerHTML = secName(m.sectionId); });
-  $$('.fmt-bar button').forEach((btn) => btn.addEventListener('click', () => {
-    const k = btn.dataset.ins;
-    const tpl = {
-      time: `[${hhmm()}] `,
-      'tpl-think': '■ What\'s on my mind\n• \n\n■ Why do I feel this way?\n• \n\n■ What I can do\n☐ \n\n■ In one line\n→ ',
-      'tpl-pro': '■ Decision: \n\n👍 Pros\n• \n\n👎 Cons\n• \n\n✅ Verdict\n→ ',
-    }[k];
-    const ins = tpl ?? k;
-    const pos = b.selectionStart;
-    const atLineStart = pos === 0 || b.value[pos - 1] === '\n';
-    let text = ins;
-    if (k.startsWith('tpl-')) { if (!atLineStart) text = '\n\n' + ins; }
-    else if (k !== 'time' && !atLineStart) text = '\n' + ins;
-    b.focus(); b.setRangeText(text, pos, b.selectionEnd, 'end'); autoGrow(b); upd();
-  }));
-  if (!m.title && !m.body) setTimeout(() => t.focus(), 280);
+  $$('.fmt-bar button').forEach((btn) => {
+    btn.addEventListener('pointerdown', (e) => { if (document.activeElement === b) e.preventDefault(); });
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.ins;
+      const tpl = {
+        time: `[${hhmm()}] `,
+        'tpl-think': '■ What\'s on my mind\n• \n\n■ Why do I feel this way?\n• \n\n■ What I can do\n☐ \n\n■ In one line\n→ ',
+        'tpl-pro': '■ Decision: \n\n👍 Pros\n• \n\n👎 Cons\n• \n\n✅ Verdict\n→ ',
+      }[k];
+      if (document.activeElement !== b) { b.focus(); caretToEnd(b); }
+      const ci = caretInfo(); const atStart = !ci || !ci.line.length;
+      if (k === 'time') insertLines(tpl);
+      else if (tpl) { if (!atStart) insertLines('\n'); insertLines(tpl); }
+      else { if (!atStart) document.execCommand('insertParagraph'); document.execCommand('insertText', false, k); }
+    });
+  });
+  if (!m.title && !plain(m.body)) setTimeout(() => t.focus(), 280);
 }
 
 function openPlan(id) {
@@ -1334,16 +1339,16 @@ function openPlan(id) {
         <div class="steps" id="planSteps"></div>
         <form id="stepForm" style="display:flex;gap:8px;margin-top:6px"><input class="input" id="stepIn" placeholder="+ Add a step (Enter)" autocomplete="off" /><button class="btn btn-ghost" type="submit">Add</button></form>
       </div>
-      <div class="field"><label>Notes</label><textarea class="textarea" id="pNote" placeholder="Details, ideas, links…">${esc(p.note || '')}</textarea></div>
+      <div class="field"><label>Notes</label>${richEditor('pNote', p.note || '', 'textarea rich-box', 'Details, ideas, links…')}</div>
     </div></div>`, {
     type: 'plan', id, item: p,
-    onClose: () => { if (!p.title.trim() && !p.note && !p.steps.length) S.plans = S.plans.filter((x) => x.id !== id); save(true); },
+    onClose: () => { if (!p.title.trim() && !plain(p.note) && !p.steps.length) S.plans = S.plans.filter((x) => x.id !== id); save(true); },
   });
   draw();
   const upd = () => save(true);
   $('#pTitle').addEventListener('input', (e) => { p.title = e.target.value; upd(); });
   $('#pDue').addEventListener('change', (e) => { p.due = e.target.value || ''; upd(); });
-  $('#pNote').addEventListener('input', (e) => { p.note = e.target.value; upd(); });
+  bindRich($('#pNote'), (v) => { p.note = v; upd(); });
   $('#pSec')?.addEventListener('change', (e) => { const [sid, gid] = e.target.value.split('|'); p.sectionId = sid; p.groupId = gid || ''; $('.crumb').innerHTML = secName(p.sectionId); upd(); });
   $('#pDone').addEventListener('click', (e) => { p.done = !p.done; p.doneAt = p.done ? Date.now() : 0; e.currentTarget.classList.toggle('on', p.done); upd(); });
   $('#pPrio').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; p.priority = +b.dataset.v; $$('#pPrio button').forEach((x) => x.classList.toggle('on', x === b)); upd(); });
@@ -1358,7 +1363,7 @@ function openPlan(id) {
   if (!p.title) setTimeout(() => $('#pTitle').focus(), 280);
 }
 
-const inspoHas = (x) => [x.title, x.text, x.note, x.who, x.url].some((v) => (v || '').trim()) || !!x.img;
+const inspoHas = (x) => [x.title, x.text, plain(x.note), x.who, x.url].some((v) => (v || '').trim()) || !!x.img;
 function openInspo(id, draft) {
   const x = draft || S.inspos.find((i) => i.id === id);
   if (!x) return;
@@ -1395,14 +1400,13 @@ function openInspo(id, draft) {
         ${isM ? `<div class="field yt-field"><label>YouTube link</label><input class="input" id="iUrl" inputmode="url" placeholder="Paste a YouTube or YouTube Music link" value="${esc(x.url || '')}" /></div>` : ''}
         ${x.yt ? `<div class="yt-embed"><iframe src="https://www.youtube-nocookie.com/embed/${x.yt}?rel=0&playsinline=1" title="YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>` : ''}`}
       <label class="thought-label" for="iNote">Thoughts</label>
-      <textarea class="thought-input" id="iNote" placeholder="${isQ ? 'Why does this stay with you?' : 'What did it leave you with?'}">${esc(x.note)}</textarea>
+      ${richEditor('iNote', x.note, 'thought-input', isQ ? 'Why does this stay with you?' : 'What did it leave you with?')}
       ${isQ ? '' : `<div class="field" style="margin-top:18px"><label>Favorite line (optional)</label><textarea class="textarea" id="iText" style="min-height:70px" placeholder="A line that stayed with you">${esc(x.text)}</textarea></div>`}`;
     hydrateImgs($('#inspoForm'));
-    grow($('#iNote'));
     $('#iTitle')?.addEventListener('input', (e) => { x.title = e.target.value; upd(); });
     $('#iText')?.addEventListener('input', (e) => { x.text = e.target.value; upd(); });
     $('#iWho')?.addEventListener('input', (e) => { x.who = e.target.value; upd(); });
-    $('#iNote').addEventListener('input', (e) => { x.note = e.target.value; grow(e.target); upd(); });
+    bindRich($('#iNote'), (v) => { x.note = v; upd(); });
     $('#iDate')?.addEventListener('change', (e) => { x.date = e.target.value; upd(); });
     $('#iRate')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const v = +b.dataset.v; x.rating = x.rating === v ? 0 : v; upd(); $$('#iRate button').forEach((y) => y.classList.toggle('on', +y.dataset.v <= x.rating)); });
     $('#iFile')?.addEventListener('change', async (e) => {
@@ -1465,23 +1469,205 @@ function caretY(ta) {
   m.remove();
   return { y, h };
 }
+function caretRectRich() {
+  const sel = getSelection(); if (!sel.rangeCount) return null;
+  const r = sel.getRangeAt(0).cloneRange(); r.collapse(false);
+  let rect = r.getClientRects()[0];
+  if (!rect || (!rect.height && !rect.top)) { // empty line: measure with a temporary marker
+    const mk = document.createElement('span'); mk.textContent = '\u200b'; r.insertNode(mk); rect = mk.getBoundingClientRect(); mk.remove();
+  }
+  return rect;
+}
 function keepCaretVisible(el) {
   const body = el?.closest('.sheet-body');
-  if (!body || document.activeElement !== el || el.tagName !== 'TEXTAREA') return;
+  if (!body || document.activeElement !== el || !(el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   // everything in layout-viewport coordinates; the visible band is what the keyboard leaves free
   const visTop = Math.max(body.getBoundingClientRect().top, vv ? vv.offsetTop : 0);
   const visBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-  const r = el.getBoundingClientRect(); const { y, h } = caretY(el);
-  const top = r.top + y, bottom = top + h;
+  let top, bottom;
+  if (el.isContentEditable) { const cr = caretRectRich(); if (!cr) return; top = cr.top; bottom = cr.bottom || cr.top + 24; }
+  else { const r = el.getBoundingClientRect(); const { y, h } = caretY(el); top = r.top + y; bottom = top + h; }
   const pad = 28;
   if (bottom > visBottom - pad) body.scrollTop += Math.ceil(bottom - (visBottom - pad));       // only as far as needed
   else if (top < visTop + 8) body.scrollTop -= Math.ceil(visTop + 8 - top);
 }
 let caretRaf = 0;
 const queueCaret = (el) => { cancelAnimationFrame(caretRaf); caretRaf = requestAnimationFrame(() => requestAnimationFrame(() => keepCaretVisible(el))); };
-document.addEventListener('input', (e) => { if (e.target?.tagName === 'TEXTAREA' && e.target.closest('#sheet')) queueCaret(e.target); });
-document.addEventListener('focusin', (e) => { if (e.target?.tagName === 'TEXTAREA' && e.target.closest('#sheet')) setTimeout(() => queueCaret(e.target), 350); });
-if (vv) vv.addEventListener('resize', () => { const a = document.activeElement; if (a?.tagName === 'TEXTAREA' && a.closest('#sheet')) queueCaret(a); });
+const writable = (el) => el && (el.tagName === 'TEXTAREA' || el.isContentEditable) && el.closest('#sheet');
+document.addEventListener('input', (e) => { if (writable(e.target)) queueCaret(e.target.closest('[contenteditable]') || e.target); });
+document.addEventListener('focusin', (e) => { if (writable(e.target)) setTimeout(() => queueCaret(e.target), 350); });
+if (vv) vv.addEventListener('resize', () => { const a = document.activeElement; if (writable(a)) queueCaret(a); });
+
+/* ───────── Rich text: bold / italic / highlight ───────── */
+const RICH_TAGS = new Set(['B', 'I', 'MARK', 'BR', 'DIV', 'P']);
+const isHTML = (v) => /<\/?(b|strong|i|em|mark|br|div|p)\b/i.test(v || '');
+function cleanHTML(html) {
+  const t = document.createElement('template'); t.innerHTML = html || '';
+  const walk = (node) => {
+    for (const c of [...node.childNodes]) {
+      if (c.nodeType === 3) { if (c.nodeValue.includes('\u200b')) c.nodeValue = c.nodeValue.replace(/\u200b/g, ''); continue; }
+      if (c.nodeType !== 1) { c.remove(); continue; }
+      walk(c);
+      let tag = c.tagName;
+      if (tag === 'STRONG') tag = 'B';
+      if (tag === 'EM') tag = 'I';
+      if (tag === 'SPAN' || tag === 'FONT') {
+        const st = c.getAttribute('style') || '';
+        tag = /font-weight:\s*(bold|[6-9]00)/i.test(st) ? 'B' : /font-style:\s*italic/i.test(st) ? 'I' : /background/i.test(st) ? 'MARK' : '';
+      }
+      if (!RICH_TAGS.has(tag)) { c.replaceWith(...c.childNodes); continue; }
+      if (tag !== c.tagName) { const n = document.createElement(tag); n.append(...c.childNodes); c.replaceWith(n); continue; }
+      for (const a of [...c.attributes]) c.removeAttribute(a.name);
+    }
+  };
+  walk(t.content);
+  return t.innerHTML;
+}
+/* every line lives in its own <div> so line-based features (lists, checkboxes) work */
+function wrapRoot(box) {
+  let run = null;
+  for (const c of [...box.childNodes]) {
+    if (c.nodeType === 1 && (c.tagName === 'DIV' || c.tagName === 'P')) { run = null; continue; }
+    if (c.nodeType === 1 && c.tagName === 'BR') {
+      if (run) { c.remove(); run = null; } else { const d = document.createElement('div'); box.insertBefore(d, c); d.append(c); }
+      continue;
+    }
+    if (!run) { run = document.createElement('div'); box.insertBefore(run, c); }
+    run.append(c);
+  }
+}
+function richHTML(v) {
+  if (isHTML(v)) { const t = document.createElement('template'); t.innerHTML = cleanHTML(v); wrapRoot(t.content); return t.innerHTML; }
+  if (!v) return '';
+  return v.split('\n').map((l) => `<div>${esc(l) || '<br>'}</div>`).join('');
+}
+function plain(v) {
+  if (!isHTML(v)) return v || '';
+  const t = document.createElement('template');
+  t.innerHTML = cleanHTML(v).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n');
+  return t.content.textContent.replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+}
+function richValue(el) { const h = cleanHTML(el.innerHTML); return plain(h).trim() ? h : ''; }
+function richEditor(id, value, cls, ph) {
+  return `<div class="rich ${cls}${value && plain(value).trim() ? '' : ' is-empty'}" id="${id}" contenteditable="true" data-ph="${esc(ph)}" spellcheck="true">${richHTML(value)}</div>`;
+}
+/* hook an editor to a field: saves cleaned HTML on every change */
+function bindRich(el, onChange) {
+  if (!el) return;
+  const sync = () => { el.classList.toggle('is-empty', !plain(el.innerHTML).trim()); onChange(richValue(el)); };
+  el.addEventListener('input', sync);
+  el.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+  const ensureBlock = () => {
+    if (el.querySelector('div,p')) return;
+    const txt = el.textContent;
+    el.innerHTML = `<div>${esc(txt) || '<br>'}</div>`;
+    caretToEnd(el);
+  };
+  el.addEventListener('focus', ensureBlock);
+  el.addEventListener('beforeinput', ensureBlock);
+}
+function caretToEnd(ed) {
+  const last = ed.lastElementChild && /^(DIV|P)$/.test(ed.lastElementChild.tagName) ? ed.lastElementChild : ed;
+  const r = document.createRange(); r.selectNodeContents(last); r.collapse(false);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+const blockOf = (ed, node) => { let n = node && (node.nodeType === 3 ? node.parentNode : node); while (n && n !== ed && n.parentNode !== ed) n = n.parentNode; return n === ed ? null : n; };
+function richCmd(cmd) {
+  const ed = document.activeElement?.closest?.('.rich'); if (!ed) return;
+  if (cmd === 'mark') {
+    const sel = getSelection(); if (!sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    const markOf = (n) => (n.nodeType === 1 ? n : n.parentElement)?.closest('mark');
+    const m = markOf(r.startContainer);
+    if (m && m === markOf(r.endContainer) && ed.contains(m)) m.replaceWith(...m.childNodes);
+    else if (r.collapsed) { toast('Select text to highlight'); return; }
+    else {
+      const mk = document.createElement('mark'); mk.append(r.extractContents()); r.insertNode(mk);
+      // park the caret just after the highlight so new typing isn't highlighted
+      const zw = document.createTextNode('\u200b'); mk.after(zw);
+      const nr = document.createRange(); nr.setStart(zw, 1); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr);
+    }
+  } else document.execCommand(cmd);
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+  richState();
+}
+function richState() {
+  const bar = $('#sheet .rt-bar'); if (!bar) return;
+  const sel = getSelection(); const n = sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+  const inMark = !!(n && (n.nodeType === 1 ? n : n.parentElement)?.closest('mark'));
+  let b = false, i = false; try { b = document.queryCommandState('bold'); i = document.queryCommandState('italic'); } catch (_) {}
+  bar.querySelector('[data-rt="bold"]')?.classList.toggle('on', b);
+  bar.querySelector('[data-rt="italic"]')?.classList.toggle('on', i);
+  bar.querySelector('[data-rt="mark"]')?.classList.toggle('on', inMark);
+}
+const RT_BAR = `<div class="rt-bar" aria-label="Formatting">
+  <button type="button" data-rt="bold" aria-label="Bold"><b>B</b></button>
+  <button type="button" data-rt="italic" aria-label="Italic"><i>I</i></button>
+  <button type="button" data-rt="mark" aria-label="Highlight"><span class="rt-hl">H</span></button>
+</div>`;
+document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('.rt-bar button')) e.preventDefault(); });
+document.addEventListener('click', (e) => { const b = e.target.closest?.('.rt-bar button'); if (b) richCmd(b.dataset.rt); });
+document.addEventListener('selectionchange', () => { if (document.activeElement?.classList?.contains('rich')) richState(); });
+document.addEventListener('focusin', (e) => { if (e.target.classList?.contains('rich')) { $('#sheet').classList.add('rich-on'); richState(); } });
+document.addEventListener('focusout', (e) => { if (e.target.classList?.contains('rich')) setTimeout(() => { if (!document.activeElement?.classList?.contains('rich')) $('#sheet').classList.remove('rich-on'); }, 200); });
+
+/* ── Photo calendar (Today) ── */
+function renderPhotoCal() {
+  const ym = view.calYM || dkey().slice(0, 7);
+  const [y, m] = ym.split('-').map(Number);
+  const lead = new Date(y, m - 1, 1).getDay(); const nDays = new Date(y, m, 0).getDate();
+  const map = {}; for (const d of S.days || []) if (d.date.startsWith(ym)) map[d.date] = d;
+  const shots = Object.values(map).filter((d) => d.img).length;
+  const today = dkey();
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="cal-blank"></span>';
+  for (let i = 1; i <= nDays; i++) {
+    const key = `${ym}-${pad(i)}`; const d = map[key];
+    cells += `<button class="cal-day${key === today ? ' today' : ''}${d?.img ? ' has' : ''}${key > today ? ' future' : ''}" data-act="cal-day" data-date="${key}">
+      ${d?.img ? `<img data-img="${d.img}" alt="" />` : ''}<span>${i}</span></button>`;
+  }
+  return `
+    <div class="photo-cal card">
+      <div class="cal-head">
+        <button class="icon-btn" data-act="cal-move" data-d="-1" aria-label="Previous month">‹</button>
+        <div class="cal-title"><b>${MONL[m - 1]}</b><small>${y}${shots ? ` · ${shots} photo day${shots === 1 ? '' : 's'}` : ' · tap a day to add a photo'}</small></div>
+        <button class="icon-btn" data-act="cal-move" data-d="1" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-grid">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((w) => `<span class="cal-wd">${w}</span>`).join('')}${cells}</div>
+      <div class="cal-foot">stay curious, stay cozy</div>
+    </div>`;
+}
+function pickPhoto(cb) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    try { const blob = await shrinkImage(f, 1100); const id = 'img-' + uid(); await imgPut(id, blob); cb(id); }
+    catch (_) { toast('Couldn\'t load that photo'); }
+  };
+  inp.click();
+}
+function calDay(date) {
+  const d = (S.days || []).find((x) => x.date === date);
+  if (!d) return pickPhoto((img) => { S.days.push({ id: uid(), date, img, note: '', created: Date.now(), updated: Date.now() }); save(); render(); toast('Added to your calendar 📷'); });
+  openDay(d);
+}
+function openDay(d) {
+  const dt = parseKey(d.date);
+  openSheet(`
+    <div class="sheet-bar">
+      <button class="icon-btn" data-act="close-sheet" aria-label="Back">${svgBack}</button>
+      <div class="crumb crumb-strong">📷 ${WDL[dt.getDay()]}, ${MONL[dt.getMonth()]} ${dt.getDate()}</div>
+      <button class="icon-btn" data-act="day-del" aria-label="Delete">${svgTrash}</button>
+      <button class="done-btn" data-act="sheet-done" aria-label="Done">${svgCheck}</button>
+    </div>
+    <div class="sheet-body"><div class="sheet-inner">
+      <div class="day-photo" data-act="day-change">${d.img ? `<img data-img="${d.img}" alt="" />` : '<span>＋ Add a photo</span>'}<span class="day-change">Change photo</span></div>
+      <label class="thought-label" for="dNote" style="margin-top:18px">This day</label>
+      ${richEditor('dNote', d.note, 'thought-input day-note', 'A line about this day…')}
+    </div></div>`, { type: 'day', id: d.id, item: d });
+  hydrateImgs($('#sheet'));
+  bindRich($('#dNote'), (v) => { d.note = v; d.updated = Date.now(); save(true); });
+}
 
 /* ───────── Modals ───────── */
 let modalResolve = null;
@@ -1711,7 +1897,7 @@ const actions = {
   'sheet-done': () => sheetDone(),
   'memo-cancel': async () => {
     const ctx = sheetCtx;
-    if (ctx.isNew && (ctx.item.title.trim() || ctx.item.body.trim())) {
+    if (ctx.isNew && (ctx.item.title.trim() || plain(ctx.item.body).trim())) {
       if (!(await ask('Discard this memo?', 'What you wrote won\'t be saved.', 'Discard', true))) return;
       ctx.discard = true;
     }
@@ -1844,6 +2030,14 @@ const actions = {
     if (!(await ask('Turn off sync here?', 'This device stops syncing. Your records stay on this device and in the cloud; enter the same phrase again any time to reconnect.', 'Turn off'))) return;
     SY = null; syncCK = null; saveSY(); render(); toast('Sync off on this device');
   },
+  'cal-move': (el) => { const [y, m] = (view.calYM || dkey().slice(0, 7)).split('-').map(Number); const d = new Date(y, m - 1 + +el.dataset.d, 1); view.calYM = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; render(); },
+  'cal-day': (el) => calDay(el.dataset.date),
+  'day-change': () => { const d = sheetCtx?.item; if (!d) return; pickPhoto((img) => { if (d.img) imgDel(d.img); d.img = img; d.updated = Date.now(); save(true); const box = $('.day-photo'); box.innerHTML = `<img data-img="${img}" alt="" /><span class="day-change">Change photo</span>`; hydrateImgs(box); }); },
+  'day-del': async () => {
+    const d = sheetCtx?.item; if (!d) return;
+    if (!(await ask('Remove this day\'s photo?', 'The photo and note for this day will be deleted.', 'Delete', true))) return;
+    if (d.img) imgDel(d.img); S.days = S.days.filter((x) => x.id !== d.id); save(true); closeSheet(); toast('Removed');
+  },
   'pet-water': () => petWater(),
   'pet-rename': () => petRename(),
   'toggle-lock': () => pinModal(lockOn() ? 'off' : 'set'),
@@ -1861,7 +2055,7 @@ const actions = {
   install: async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); },
   export: async () => {
     const images = {};
-    for (const x of S.inspos) if (x.img) { const b = await imgGet(x.img).catch(() => null); if (b) images[x.img] = await blobToDataURL(b); }
+    for (const x of [...S.inspos, ...(S.days || [])]) if (x.img) { const b = await imgGet(x.img).catch(() => null); if (b) images[x.img] = await blobToDataURL(b); }
     const blob = new Blob([JSON.stringify({ ...S, images }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `grove-backup-${dkey()}.json`;
@@ -1925,7 +2119,7 @@ document.addEventListener('input', (e) => {
     const sec = S.sections.find((s) => s.id === view.id);
     const all = S.memos.filter((m) => m.sectionId === sec.id && m.kind !== 'scribble');
     const q = view.mq.trim().toLowerCase();
-    const ms = all.filter((m) => !q || (m.title + ' ' + m.body).toLowerCase().includes(q)).sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
+    const ms = all.filter((m) => !q || (m.title + ' ' + plain(m.body)).toLowerCase().includes(q)).sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
     $('#memoList').innerHTML = memoGrid(ms, all.length);
   }
 });
@@ -1958,7 +2152,7 @@ function toast(msg) {
 
 /* ───────── Cloud sync (end-to-end encrypted, via /api/sync + Vercel Blob) ───────── */
 const SYNC_KEY = 'grove-sync';
-const SYNC_COLS = ['sections', 'memos', 'plans', 'routines', 'inspos', 'faith', 'words'];
+const SYNC_COLS = ['sections', 'memos', 'plans', 'routines', 'inspos', 'faith', 'words', 'days'];
 const SAMPLE_TITLES = new Set(['Welcome to Grove 🌿', 'Explore Grove', 'Drink a glass of water', 'Daily reflection', 'The best time to plant a tree was 20 years ago. The second best time is now.']);
 let SY = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)); } catch (_) { return null; } })();
 const saveSY = () => { try { if (SY) localStorage.setItem(SYNC_KEY, JSON.stringify(SY)); else localStorage.removeItem(SYNC_KEY); } catch (_) {} };
@@ -2080,11 +2274,12 @@ function mergeState(L, R) {
 }
 /* ✓ works like "Done" in iPhone Notes: save + put the keyboard away, stay on the page; ‹ leaves */
 const SHEET_META = {
-  memo: { col: 'memos', has: (m) => (m.title || '').trim() || (m.body || '').trim(), del: 'del-memo' },
+  memo: { col: 'memos', has: (m) => (m.title || '').trim() || plain(m.body).trim(), del: 'del-memo' },
   inspo: { col: 'inspos', has: (x) => inspoHas(x), del: 'del-inspo' },
   faith: { col: 'faith', has: (x) => faithHas(x), del: 'del-faith' },
   word: { col: 'words', has: (w) => (w.word || '').trim(), del: 'del-word' },
   plan: { col: 'plans', has: () => true, del: 'del-plan' },
+  day: { col: 'days', has: () => true, del: 'day-del' },
 };
 function setEditing(on) { $('#sheet').classList.toggle('editing', !!on); }
 function sheetDone() {
@@ -2106,8 +2301,9 @@ function sheetDone() {
   if (item) item.updated = Date.now();
   save(true); setEditing(false); toast('Saved ✓');
 }
-document.addEventListener('focusin', (e) => { if (e.target.closest?.('#sheet') && /^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) setEditing(true); });
-document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!a || !$('#sheet').contains(a) || !/^(TEXTAREA|INPUT|SELECT)$/.test(a.tagName)) setEditing(false); }, 250));
+const isField = (el) => !!el && (/^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName) || el.isContentEditable);
+document.addEventListener('focusin', (e) => { if (e.target.closest?.('#sheet') && isField(e.target)) setEditing(true); });
+document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!a || !$('#sheet').contains(a) || !isField(a)) setEditing(false); }, 250));
 document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('.done-btn')) e.preventDefault(); }); // keep focus until the tap lands
 const SHEET_COL = { memo: 'memos', plan: 'plans', inspo: 'inspos', faith: 'faith', word: 'words' };
 function reattachOpenItem() {
@@ -2188,7 +2384,7 @@ async function syncNow() {
 }
 async function syncImages() {
   SY.imgs ||= [];
-  const ids = [...new Set(S.inspos.map((x) => x.img).filter(Boolean))];
+  const ids = [...new Set([...S.inspos, ...(S.days || [])].map((x) => x.img).filter(Boolean))];
   for (const id of ids) {
     const local = await imgGet(id).catch(() => null);
     if (local && !SY.imgs.includes(id)) {
