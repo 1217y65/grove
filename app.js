@@ -365,25 +365,47 @@ function petDrops() {
   const done = todayRoutines().filter((r) => isChecked(r.id)).length;
   return Math.max(0, done - ((S.pet.water || {})[dkey()] || 0));
 }
+/* pixel gardener — an original 16×19 sprite */
+const PX_PAL = { K: '#2b2f2c', G: '#3f7a4f', g: '#5fa36a', L: '#7cc46b', S: '#3f7454', F: '#f7ddc2', C: '#f2a39a', E: '#2b2f2c', M: '#c9675d',
+  O: '#4f8a5f', o: '#3b6a49', W: '#f5efe0', B: '#7a5537', P: '#f4a6bf', Y: '#f7d774' };
+const PX_BASE = [
+  '.......LL.......',
+  '......LLS.......',
+  '.......S........',
+  '....KKKKKKKK....',
+  '...KGGGGGgGGK...',
+  '..KGGGGGGGGgGK..',
+  '..KGgGGGGGGGGK..',
+  '..KFFFFFFFFFFK..',
+  '..KFFEFFFFEFFK..',
+  '..KFFEFFFFEFFK..',
+  '..KFCFFFFFFCFK..',
+  '..KFFFFMMFFFFK..',
+  '...KFFFFFFFFK...',
+  '....KKKKKKKK....',
+  '...KFKOOOOKFK...',
+  '....KOOooOOK....',
+];
+const PX_LEGS_A = ['.....KBKKBK.....', '.....KK..KK.....'];
+const PX_LEGS_B = ['....KBK..KBK....', '....KK....KK....'];
+const PX_FLOWER = ['......PYP.......', '.......P........'];
+function pxRects(rows, y0 = 0) {
+  let out = '';
+  rows.forEach((row, y) => [...row].forEach((c, x) => { if (c !== '.' && PX_PAL[c]) out += `<rect x="${x}" y="${y + y0}" width="1.02" height="1.02" fill="${PX_PAL[c]}"/>`; }));
+  return out;
+}
 function petSVG(lv) {
-  const crown = lv >= 3 ? '<g class="p-crown"><circle cx="50" cy="9" r="4.2" fill="#f4b6c2"/><circle cx="50" cy="9" r="1.8" fill="#f7d774"/></g>' : '';
-  return `<svg viewBox="0 0 100 100" class="p-svg" aria-hidden="true">
-    <ellipse cx="50" cy="94" rx="24" ry="4.5" fill="rgba(20,40,30,.16)"/>
-    <g class="p-feet"><ellipse class="p-foot l" cx="40" cy="88" rx="7" ry="4.5" fill="#8fb86f"/><ellipse class="p-foot r" cx="60" cy="88" rx="7" ry="4.5" fill="#8fb86f"/></g>
-    <g class="p-body">
-      <g class="p-leaves">
-        <path d="M50 30 C50 18 40 10 28 12 C30 24 40 30 50 30Z" fill="#4f8a5b"/>
-        <path d="M50 30 C50 16 62 8 74 11 C71 24 61 30 50 30Z" fill="#6aa86f"/>
-        <path d="M50 31 L50 22" stroke="#3f7454" stroke-width="3" stroke-linecap="round"/>
-        ${crown}
-      </g>
-      <path d="M50 28 C74 28 82 46 82 62 C82 80 68 88 50 88 C32 88 18 80 18 62 C18 46 26 28 50 28Z" fill="#cfe6b3" stroke="#a9cc8a" stroke-width="2"/>
-      <ellipse cx="40" cy="50" rx="10" ry="6" fill="#fff" opacity=".35"/>
-      <g class="p-eyes"><ellipse cx="39" cy="60" rx="3.6" ry="4.6" fill="#21302a"/><ellipse cx="61" cy="60" rx="3.6" ry="4.6" fill="#21302a"/>
-        <circle cx="40.2" cy="58.4" r="1.2" fill="#fff"/><circle cx="62.2" cy="58.4" r="1.2" fill="#fff"/></g>
-      <g class="p-sleep-eyes"><path d="M35 61 Q39 64 43 61" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M57 61 Q61 64 65 61" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/></g>
-      <ellipse cx="31" cy="68" rx="5" ry="3" fill="#f3a9a0" opacity=".7"/><ellipse cx="69" cy="68" rx="5" ry="3" fill="#f3a9a0" opacity=".7"/>
-      <path class="p-mouth" d="M45 68 Q50 73 55 68" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  const head = lv >= 3 ? [...PX_FLOWER, ...PX_BASE.slice(2)] : PX_BASE;
+  const body = pxRects(head);
+  const closed = `<rect x="5" y="8" width="1.02" height="2.02" fill="${PX_PAL.F}"/><rect x="10" y="8" width="1.02" height="2.02" fill="${PX_PAL.F}"/>`
+    + `<rect x="4.5" y="9.2" width="2" height=".8" fill="${PX_PAL.K}"/><rect x="9.5" y="9.2" width="2" height=".8" fill="${PX_PAL.K}"/>`;
+  return `<svg viewBox="0 -1 16 20" class="p-svg" shape-rendering="crispEdges" aria-hidden="true">
+    <ellipse cx="8" cy="18.2" rx="5" ry="1" fill="rgba(20,40,30,.18)" shape-rendering="auto"/>
+    <g class="p-bob">
+      ${body}
+      <g class="fA">${pxRects(PX_LEGS_A, 16)}</g>
+      <g class="fB">${pxRects(PX_LEGS_B, 16)}</g>
+      <g class="fBlink">${closed}</g>
     </g>
   </svg>`;
 }

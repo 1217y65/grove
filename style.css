@@ -845,3 +845,25 @@ body.gated .app, body.gated .toast:not(.show) { visibility: hidden; }
 @keyframes floatUp { from { opacity: 0; transform: translate(-50%, 0) scale(.6); } 20% { opacity: 1; } to { opacity: 0; transform: translate(-50%, -46px) scale(1.1); } }
 @keyframes dropDown { from { opacity: 0; transform: translate(-50%, -10px); } 20% { opacity: 1; } to { opacity: 0; transform: translate(-50%, 40px); } }
 @media (max-width: 860px) { .g-scene { height: 200px; } }
+
+/* v2.6: pixel gardener sprite */
+.pet { width: 64px; height: 80px; transform: translate(-50%, -92%) scale(calc(var(--depth, 1) * (1 + var(--lv, 0) * .05))); }
+.p-svg { image-rendering: pixelated; }
+.p-svg .fB, .p-svg .fBlink { display: none; }
+.pet.walking .p-svg .fA { animation: frameA .36s steps(1) infinite; }
+.pet.walking .p-svg .fB { display: inline; animation: frameB .36s steps(1) infinite; }
+@keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes frameB { 0% { opacity: 0; } 50% { opacity: 1; } }
+.pet.walking .p-bob { animation: pxbob .36s steps(1) infinite; }
+@keyframes pxbob { 0% { transform: none; } 50% { transform: translateY(-.6px); } }
+.pet:not(.walking) .p-svg .fBlink { display: inline; opacity: 0; animation: pxblink 4.2s steps(1) infinite; }
+@keyframes pxblink { 0%, 93% { opacity: 0; } 94%, 97% { opacity: 1; } 98% { opacity: 0; } }
+.pet.sleeping .p-svg .fBlink { display: inline; opacity: 1; animation: none; }
+.pet.sleeping .p-bob { animation: pxbreathe 3.2s steps(2) infinite; }
+@keyframes pxbreathe { 50% { transform: translateY(.4px); } }
+.pet.hop .p-svg { animation: pxhop .5s steps(5); }
+@keyframes pxhop { 40% { transform: scaleX(var(--dir, 1)) translateY(-3px); } }
+.p-zzz { right: -2px; top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.p-bubble { font-family: ui-monospace, "SF Mono", Menlo, monospace, var(--font); border-radius: 4px; box-shadow: 0 0 0 2px #2b2f2c, 3px 3px 0 rgba(0,0,0,.18); }
+.p-bubble::after { border-top-color: #2b2f2c; }
+.all-done .pet .p-bob { filter: drop-shadow(0 0 4px rgba(255, 236, 150, .95)); }
