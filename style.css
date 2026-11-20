@@ -931,3 +931,6 @@ body.gated .app, body.gated .toast:not(.show) { visibility: hidden; }
 
 /* previews never start with blank lines */
 .qt-body, .m-body, .pc-note, .q-note { white-space: pre-line; }
+
+/* verse editor: just the words and the reference */
+.quote-input.verse-input { font-size: 19px; line-height: 1.6; font-weight: 650; margin-bottom: 6px; overflow: hidden; }

@@ -918,10 +918,8 @@ function openFaith(id, draft) {
       </div>`;
   } else {
     form = `
-      <textarea class="quote-input" id="fText" rows="2" placeholder="Write the verse…">${esc(x.text)}</textarea>
-      <input class="i-sub-in" id="fRef" placeholder="Reference — e.g. 시편 23:1" value="${esc(x.ref)}" style="margin-bottom:20px" />
-      <label class="thought-label" for="fNote">Thoughts</label>
-      ${richEditor('fNote', x.note, 'thought-input', 'Why does this verse speak to you?')}`;
+      <textarea class="quote-input verse-input" id="fText" rows="3" placeholder="Write the verse…">${esc(x.text)}</textarea>
+      <input class="i-sub-in" id="fRef" placeholder="Reference — e.g. 시편 23:1" value="${esc(x.ref)}" />`;
   }
   openSheet(`
     <div class="sheet-bar">
@@ -942,6 +940,7 @@ function openFaith(id, draft) {
   bind('#fDate', 'date', 'change'); bind('#fPassage', 'passage'); bind('#fTitle', 'title'); bind('#fApply', 'apply'); bind('#fPray', 'pray');
   bind('#fWho', 'who'); bind('#fAnswer', 'answer'); bind('#fText', 'text'); bind('#fRef', 'ref');
   bindRich($('#fNote'), (v) => { x.note = v; upd(); });
+  const vt = $('.verse-input'); if (vt) { const fit = () => { vt.style.height = 'auto'; vt.style.height = `${vt.scrollHeight}px`; }; fit(); vt.addEventListener('input', fit); }
   $('#fAns')?.addEventListener('click', () => {
     x.answered = !x.answered; x.answeredAt = x.answered ? Date.now() : 0; upd();
     $('#fAnsBox').classList.toggle('on', x.answered); $('#fAns .check').classList.toggle('on', x.answered);
