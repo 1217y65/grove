@@ -766,3 +766,82 @@ body.gated .app, body.gated .toast:not(.show) { visibility: hidden; }
 .scribble-in { min-height: 120px; font-size: 16px; }
 .section-title .link { background: none; border: 0; cursor: pointer; }
 @media (max-width: 860px) { .scribble-grid { grid-template-columns: 1fr 1fr; gap: 8px; } }
+
+/* ───────── v2.5: Garden ───────── */
+.garden { margin-top: 16px; padding: 12px 12px 10px; overflow: hidden; }
+.g-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.g-name { font-weight: 750; font-size: 15px; display: flex; align-items: baseline; gap: 6px; padding: 2px 4px; border-radius: 8px; }
+.g-name span { font-size: 12px; font-weight: 700; color: var(--g-600); background: var(--g-100); padding: 1px 7px; border-radius: 99px; }
+.g-xp { flex: 1; height: 7px; border-radius: 99px; background: var(--ivory-2); overflow: hidden; }
+.g-xp i { display: block; height: 100%; background: linear-gradient(90deg, #8fc27a, var(--g-600)); border-radius: 99px; transition: width .5s; }
+.g-water { height: 32px; padding: 0 12px; border-radius: 99px; background: #e3eef6; color: #2c5a78; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.g-water:disabled { opacity: .45; }
+.g-water:not(:disabled) { animation: wiggle 2.4s ease-in-out infinite; }
+@keyframes wiggle { 0%, 88%, 100% { transform: none; } 92% { transform: rotate(-6deg); } 96% { transform: rotate(6deg); } }
+
+.g-scene { position: relative; height: 220px; border-radius: 14px; overflow: hidden; cursor: pointer; user-select: none; -webkit-user-select: none;
+  background: linear-gradient(180deg, #dcefe9 0%, #eef5e4 55%, #f3f0dc 100%); }
+.g-scene.sky-dawn { background: linear-gradient(180deg, #f7e3d3 0%, #f1efe0 60%, #f3f0dc 100%); }
+.g-scene.sky-dusk { background: linear-gradient(180deg, #f3c9a8 0%, #f2dfc4 50%, #efe7cf 100%); }
+.g-scene.sky-night { background: linear-gradient(180deg, #13261f 0%, #1e3a2e 60%, #24432f 100%); }
+.g-sun { position: absolute; right: 14%; top: 14%; width: 34px; height: 34px; border-radius: 50%; background: #ffe7a3; box-shadow: 0 0 0 8px rgba(255, 231, 163, .35); }
+.sky-dusk .g-sun { background: #ffc58a; top: 26%; box-shadow: 0 0 0 8px rgba(255, 197, 138, .35); }
+.sky-night .g-sun { background: #f4ecd2; box-shadow: none; width: 26px; height: 26px; }
+.sky-night .g-sun::after { content: ""; position: absolute; inset: -2px -2px 4px 8px; border-radius: 50%; background: #13261f; }
+.g-stars { position: absolute; left: 0; right: 0; top: 10%; text-align: center; color: #e9e2c6; letter-spacing: 18px; font-size: 11px; opacity: .8; }
+.g-cloud { position: absolute; height: 14px; border-radius: 99px; background: rgba(255, 255, 255, .85); animation: drift 38s linear infinite; }
+.g-cloud::before { content: ""; position: absolute; left: 22%; top: -9px; width: 44%; height: 18px; border-radius: 99px; background: inherit; }
+.g-cloud.c1 { width: 70px; top: 18%; left: -20%; }
+.g-cloud.c2 { width: 50px; top: 32%; left: -30%; animation-duration: 52s; animation-delay: -20s; opacity: .7; }
+@keyframes drift { to { transform: translateX(160vw); } }
+.g-hill { position: absolute; border-radius: 50%; }
+.g-hill.h1 { left: -15%; right: 35%; top: 44%; height: 120px; background: #c3dcb0; }
+.g-hill.h2 { left: 30%; right: -20%; top: 50%; height: 120px; background: #b4d39f; }
+.sky-night .g-hill.h1 { background: #2d4d38; } .sky-night .g-hill.h2 { background: #31553d; }
+.g-ground { position: absolute; left: 0; right: 0; top: 60%; bottom: 0; background: linear-gradient(180deg, #a9cf8f, #98c37e); }
+.sky-night .g-ground { background: linear-gradient(180deg, #2f5139, #294832); }
+.g-tree { position: absolute; left: 10%; top: 26%; width: 64px; height: 100px; z-index: 66; pointer-events: none; }
+.t-top { position: absolute; left: 0; top: 0; width: 64px; height: 58px; border-radius: 50% 50% 46% 46%; background: #5f9a62; box-shadow: inset -8px -6px 0 rgba(0,0,0,.08); }
+.t-trunk { position: absolute; left: 27px; top: 50px; width: 10px; height: 46px; border-radius: 4px; background: #8a6a46; }
+.sky-night .t-top { background: #2f5a3b; }
+.g-flower { position: absolute; transform: translate(-50%, -100%); z-index: 1; pointer-events: none; line-height: 1; }
+.g-flower.pop { animation: bloom .7s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes bloom { from { transform: translate(-50%, -100%) scale(0) rotate(-30deg); } to { transform: translate(-50%, -100%) scale(1); } }
+.g-hint { font-size: 12.5px; color: var(--ink-2); text-align: center; margin-top: 8px; }
+
+/* the sprout */
+.pet { position: absolute; width: 64px; height: 64px; transform: translate(-50%, -88%) scale(calc(var(--depth, 1) * (1 + var(--lv, 0) * .06))); transform-origin: 50% 100%; cursor: pointer; }
+.p-svg { width: 100%; height: 100%; transform: scaleX(var(--dir, 1)); overflow: visible; }
+.p-body { animation: breathe 2.6s ease-in-out infinite; transform-origin: 50% 88%; }
+@keyframes breathe { 50% { transform: scale(1.03, .97); } }
+.pet.walking .p-body { animation: bob .42s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-4px) rotate(-2deg); } }
+.pet.walking .p-foot.l { animation: stepA .42s ease-in-out infinite; } .pet.walking .p-foot.r { animation: stepB .42s ease-in-out infinite; }
+@keyframes stepA { 50% { transform: translateY(-3px); } } @keyframes stepB { 0%, 100% { transform: translateY(-3px); } 50% { transform: none; } }
+.p-leaves { transform-origin: 50% 30px; animation: sway 3.2s ease-in-out infinite; }
+@keyframes sway { 50% { transform: rotate(5deg); } }
+.p-eyes { transform-origin: 50% 60px; animation: blink 4.5s infinite; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+.p-sleep-eyes { display: none; }
+.pet.sleeping .p-eyes, .pet.sleeping .p-mouth { display: none; } .pet.sleeping .p-sleep-eyes { display: inline; }
+.pet.sleeping .p-body { animation: breathe 4s ease-in-out infinite; }
+.p-zzz { display: none; position: absolute; right: -6px; top: -8px; color: #e9e2c6; font-weight: 800; font-size: 15px; animation: zz 2.4s ease-in-out infinite; }
+.p-zzz small { font-size: 11px; margin-left: 2px; }
+.pet.sleeping .p-zzz { display: block; }
+@keyframes zz { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
+.pet.hop .p-svg { animation: hop .55s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes hop { 40% { transform: scaleX(var(--dir, 1)) translateY(-18px); } }
+.all-done .pet .p-body { filter: drop-shadow(0 0 6px rgba(255, 236, 150, .9)); }
+.p-bubble {
+  position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, 4px) scale(.8); opacity: 0; pointer-events: none;
+  background: #fff; color: var(--ink); font-size: 12px; font-weight: 650; padding: 4px 9px; border-radius: 10px; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12); transition: opacity .2s, transform .2s;
+}
+.p-bubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #fff; }
+.p-bubble.show { opacity: 1; transform: translate(-50%, -2px) scale(1); }
+.g-heart, .g-drop { position: absolute; z-index: 200; pointer-events: none; font-size: 16px; transform: translate(-50%, 0); }
+.g-heart { animation: floatUp 1.4s ease-out both; }
+.g-drop { animation: dropDown 1.1s ease-in both; font-size: 13px; }
+@keyframes floatUp { from { opacity: 0; transform: translate(-50%, 0) scale(.6); } 20% { opacity: 1; } to { opacity: 0; transform: translate(-50%, -46px) scale(1.1); } }
+@keyframes dropDown { from { opacity: 0; transform: translate(-50%, -10px); } 20% { opacity: 1; } to { opacity: 0; transform: translate(-50%, 40px); } }
+@media (max-width: 860px) { .g-scene { height: 200px; } }

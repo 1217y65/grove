@@ -71,6 +71,7 @@ function seed() {
     sections: [memo, plan, routine, inspo, faith, words],
     faith: [],
     words: [],
+    pet: { name: 'Sprout', xp: 0, born: dkey(), water: {} },
     inspos: [
       { id: uid(), sectionId: inspo.id, kind: 'quote', text: 'The best time to plant a tree was 20 years ago. The second best time is now.', title: '', who: 'Proverb', note: '', rating: 0, date: dkey(), created: now, updated: now },
     ],
@@ -108,6 +109,7 @@ function load() {
 }
 function normalize(d) {
   d.sections ||= []; d.memos ||= []; d.plans ||= []; d.routines ||= []; d.inspos ||= []; d.faith ||= []; d.words ||= []; d.checks ||= {};
+  d.pet ||= { name: 'Sprout', xp: 0, born: dkey(), water: {} };
   d.settings = Object.assign({ notify: false, remindAt: '21:00', remind: true, notified: {} }, d.settings || {});
   if ((d.v || 1) < 2) migrateV2(d);
   if (d.v < 3) {
@@ -239,7 +241,7 @@ function render() {
   renderSidebar();
   const main = $('#main');
   let title = 'Grove';
-  if (view.name === 'today') main.innerHTML = renderToday();
+  if (view.name === 'today') { main.innerHTML = renderToday(); requestAnimationFrame(startGarden); }
   else if (view.name === 'search') { main.innerHTML = renderSearch(); title = 'Search'; }
   else if (view.name === 'settings') { main.innerHTML = renderSettings(); title = 'Settings'; }
   else if (view.name === 'section') {
@@ -317,15 +319,7 @@ function renderToday() {
   const rs = todayRoutines();
   const done = rs.filter((r) => isChecked(r.id)).length;
   const pct = rs.length ? done / rs.length : 0;
-  const t = dkey();
-  const week = dkey(addDays(now, 7));
-  const planSecs = new Set(S.sections.filter((s) => s.type === 'plan').map((s) => s.id));
-  const urgent = S.plans.filter((p) => planSecs.has(p.sectionId) && !p.done && p.due && p.due <= week)
-    .sort((a, b) => a.due.localeCompare(b.due) || b.priority - a.priority);
-  const memoSecs = new Set(S.sections.filter((s) => s.type === 'memo').map((s) => s.id));
-  const recent = S.memos.filter((m) => memoSecs.has(m.sectionId)).sort((a, b) => b.updated - a.updated).slice(0, 4);
   const msg = !rs.length ? 'No routines scheduled today' : done === rs.length ? 'All done for today! 🎉' : `${rs.length - done} to go — one step at a time.`;
-
   return `
     <div class="hello">${greeting()}</div>
     <h1 class="page-title display">${WDL[now.getDay()]}, ${MONL[now.getMonth()]} ${now.getDate()}</h1>
@@ -333,6 +327,8 @@ function renderToday() {
       <input name="q" placeholder="💭 Capture a thought…" autocomplete="off" />
       <button class="btn btn-primary btn-sm" type="submit">Save</button>
     </form>
+
+    ${renderGarden()}
 
     <div class="progress-card">
       ${ring(pct)}
@@ -346,40 +342,171 @@ function renderToday() {
     ${rs.length ? `<div class="list">${rs.map((r) => routineRow(r, true)).join('')}</div>`
       : `<div class="empty"><div class="e-icon">🌱</div>Add daily habits in a Routine section</div>`}
 
-    <div class="grid-2">
-      <div>
-        <div class="section-title">🎯 Upcoming <span class="count">${urgent.length}</span></div>
-        ${urgent.length ? `<div class="list">${urgent.slice(0, 8).map((p) => planRow(p, true)).join('')}</div>`
-          : `<div class="empty">Nothing due in the next 7 days</div>`}
-      </div>
-      <div>
-        <div class="section-title">📝 Memos</div>
-        ${recent.length ? `<div class="list">${recent.map((m) => `
-          <button class="card memo" style="min-height:0" data-act="${m.kind === 'scribble' ? 'open-scribble' : 'open-memo'}" data-id="${m.id}">
-            <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
-            ${m.body ? `<div class="m-body" style="-webkit-line-clamp:2">${esc(m.body)}</div>` : ''}
-            <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
-          </button>`).join('')}</div>` : `<div class="empty">No memos yet</div>`}
-      </div>
-    </div>
     ${(() => {
       const secs = new Set(S.sections.filter((x) => x.type === 'faith').map((x) => x.id));
       const vs = S.faith.filter((x) => secs.has(x.sectionId) && x.kind === 'verse' && x.text);
       if (!vs.length) return '';
       const n = [...dkey()].reduce((a, c) => a * 17 + c.charCodeAt(0), 3) >>> 0;
       return `<div class="section-title">✝️ Verse for today</div>${verseCard(vs[n % vs.length], true)}`;
-    })()}
-    ${(() => {
-      const secs = new Set(S.sections.filter((x) => x.type === 'inspo').map((x) => x.id));
-      const pool = S.inspos.filter((x) => secs.has(x.sectionId) && x.text);
-      if (!pool.length) return '';
-      const seedN = [...dkey()].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
-      return `<div class="section-title">✨ Inspiration</div>${quoteCard(pool[seedN % pool.length], true)}`;
-    })()}
-    <div>
-    </div>
-    ${t ? '' : ''}`;
+    })()}`;
 }
+/* ───────── Garden: a little sprout friend that lives on the Today page ───────── */
+const PET_LINES = {
+  day: ['hi!', '🌱', '오늘도 화이팅!', 'you got this', '♪~', '헤헤', 'water pls 💧', '산책 중…', '☀️', 'hello there'],
+  done: ['최고야! ✨', 'so proud of you', '오늘 완벽해 🌷', 'yay!!', '꽃이 가득해 🌼'],
+  night: ['zzz…', '…쿨', 'good night 🌙'],
+};
+const FLOWERS = ['🌷', '🌼', '🌸', '🌻', '💐', '🌺'];
+const petLevel = (xp) => Math.floor((xp || 0) / 50) + 1;
+const nightNow = () => { const h = new Date().getHours(); return h >= 22 || h < 6; };
+const skyNow = () => { const h = new Date().getHours(); return nightNow() ? 'night' : h >= 17 ? 'dusk' : h < 9 ? 'dawn' : 'day'; };
+function petDrops() {
+  S.pet ||= { name: 'Sprout', xp: 0, born: dkey(), water: {} };
+  const done = todayRoutines().filter((r) => isChecked(r.id)).length;
+  return Math.max(0, done - ((S.pet.water || {})[dkey()] || 0));
+}
+function petSVG(lv) {
+  const crown = lv >= 3 ? '<g class="p-crown"><circle cx="50" cy="9" r="4.2" fill="#f4b6c2"/><circle cx="50" cy="9" r="1.8" fill="#f7d774"/></g>' : '';
+  return `<svg viewBox="0 0 100 100" class="p-svg" aria-hidden="true">
+    <ellipse cx="50" cy="94" rx="24" ry="4.5" fill="rgba(20,40,30,.16)"/>
+    <g class="p-feet"><ellipse class="p-foot l" cx="40" cy="88" rx="7" ry="4.5" fill="#8fb86f"/><ellipse class="p-foot r" cx="60" cy="88" rx="7" ry="4.5" fill="#8fb86f"/></g>
+    <g class="p-body">
+      <g class="p-leaves">
+        <path d="M50 30 C50 18 40 10 28 12 C30 24 40 30 50 30Z" fill="#4f8a5b"/>
+        <path d="M50 30 C50 16 62 8 74 11 C71 24 61 30 50 30Z" fill="#6aa86f"/>
+        <path d="M50 31 L50 22" stroke="#3f7454" stroke-width="3" stroke-linecap="round"/>
+        ${crown}
+      </g>
+      <path d="M50 28 C74 28 82 46 82 62 C82 80 68 88 50 88 C32 88 18 80 18 62 C18 46 26 28 50 28Z" fill="#cfe6b3" stroke="#a9cc8a" stroke-width="2"/>
+      <ellipse cx="40" cy="50" rx="10" ry="6" fill="#fff" opacity=".35"/>
+      <g class="p-eyes"><ellipse cx="39" cy="60" rx="3.6" ry="4.6" fill="#21302a"/><ellipse cx="61" cy="60" rx="3.6" ry="4.6" fill="#21302a"/>
+        <circle cx="40.2" cy="58.4" r="1.2" fill="#fff"/><circle cx="62.2" cy="58.4" r="1.2" fill="#fff"/></g>
+      <g class="p-sleep-eyes"><path d="M35 61 Q39 64 43 61" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M57 61 Q61 64 65 61" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/></g>
+      <ellipse cx="31" cy="68" rx="5" ry="3" fill="#f3a9a0" opacity=".7"/><ellipse cx="69" cy="68" rx="5" ry="3" fill="#f3a9a0" opacity=".7"/>
+      <path class="p-mouth" d="M45 68 Q50 73 55 68" stroke="#21302a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    </g>
+  </svg>`;
+}
+function renderGarden() {
+  S.pet ||= { name: 'Sprout', xp: 0, born: dkey(), water: {} };
+  const pet = S.pet; const lv = petLevel(pet.xp); const into = (pet.xp || 0) % 50;
+  const rs = todayRoutines(); const done = rs.filter((r) => isChecked(r.id)).length;
+  const drops = petDrops(); const sky = skyNow();
+  const allDone = rs.length && done === rs.length;
+  const hint = sky === 'night' ? `${esc(pet.name)} is sleeping · 🌙` : allDone ? `Every routine done — ${esc(pet.name)} is glowing ✨` : drops ? `You earned 💧${drops} — tap Water!` : `Finish a routine → a flower blooms & you get 💧`;
+  return `
+    <div class="garden card" id="garden">
+      <div class="g-top">
+        <button class="g-name" data-act="pet-rename">${esc(pet.name)} <span>Lv ${lv}</span></button>
+        <div class="g-xp" title="${into}/50 to next level"><i style="width:${into * 2}%"></i></div>
+        <button class="g-water" data-act="pet-water" ${drops ? '' : 'disabled'}>💧 Water${drops ? ` ×${drops}` : ''}</button>
+      </div>
+      <div class="g-scene sky-${sky}${allDone ? ' all-done' : ''}" id="gScene">
+        <div class="g-sun"></div>
+        ${sky === 'night' ? '<div class="g-stars">✦ · ✧ · ✦ · ✧</div>' : '<div class="g-cloud c1"></div><div class="g-cloud c2"></div>'}
+        <div class="g-hill h1"></div><div class="g-hill h2"></div><div class="g-ground"></div>
+        <div class="g-tree"><div class="t-top"></div><div class="t-trunk"></div></div>
+        <div id="gFlowers">${flowerSpots(done).map((f, i) => `<span class="g-flower${i >= gardenLastFlowers ? ' pop' : ''}" style="left:${f.x}%;top:${f.y}%;font-size:${f.s}px">${f.e}</span>`).join('')}</div>
+        <div class="pet${sky === 'night' ? ' sleeping' : ''}" id="pet" style="--lv:${Math.min(lv - 1, 8)}">${petSVG(lv)}<div class="p-bubble" id="petBubble"></div><div class="p-zzz">z<small>z</small></div></div>
+      </div>
+      <div class="g-hint">${hint}</div>
+    </div>`;
+}
+let gardenLastFlowers = 0;
+function flowerSpots(n) {
+  let seed = [...dkey()].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 11);
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  const out = [];
+  for (let i = 0; i < Math.min(n, 14); i++) out.push({ x: 6 + rnd() * 84, y: 66 + rnd() * 24, s: 15 + Math.round(rnd() * 7), e: FLOWERS[Math.floor(rnd() * FLOWERS.length)] });
+  return out;
+}
+
+const PET = { x: 55, y: 76, tx: 55, ty: 76, dir: 1, mode: 'idle', until: 0, raf: 0, last: 0 };
+function startGarden() {
+  cancelAnimationFrame(PET.raf);
+  const el = $('#pet'), sc = $('#gScene'); if (!el || !sc) return;
+  gardenLastFlowers = Math.min(todayRoutines().filter((r) => isChecked(r.id)).length, 14);
+  if (nightNow()) { PET.x = 23; PET.y = 74; PET.mode = 'sleep'; }
+  sc.onclick = (e) => {
+    if (e.target.closest('#pet')) return petPoke();
+    if (nightNow()) return;
+    const r = sc.getBoundingClientRect();
+    PET.tx = Math.max(6, Math.min(94, ((e.clientX - r.left) / r.width) * 100));
+    PET.ty = Math.max(62, Math.min(90, ((e.clientY - r.top) / r.height) * 100));
+    PET.mode = 'walk';
+  };
+  const step = (t) => {
+    if (!document.body.contains(el)) return;
+    const dt = Math.min(0.05, (t - (PET.last || t)) / 1000); PET.last = t;
+    if (PET.mode === 'walk') {
+      const dx = PET.tx - PET.x, dy = PET.ty - PET.y, d = Math.hypot(dx, dy);
+      if (d < 0.6) { PET.mode = 'idle'; PET.until = t + 1200 + Math.random() * 3200; }
+      else { const v = 11 * dt; PET.x += (dx / d) * Math.min(v, d); PET.y += (dy / d) * Math.min(v, d); if (Math.abs(dx) > 0.3) PET.dir = dx > 0 ? 1 : -1; }
+    } else if (PET.mode === 'idle' && t > PET.until && !nightNow()) {
+      PET.tx = 8 + Math.random() * 84; PET.ty = 64 + Math.random() * 24; PET.mode = 'walk';
+      if (Math.random() < 0.18) petSay(randomLine());
+    }
+    const depth = 0.78 + ((PET.y - 62) / 28) * 0.3;
+    el.style.left = `${PET.x}%`; el.style.top = `${PET.y}%`;
+    el.style.setProperty('--dir', PET.dir); el.style.setProperty('--depth', depth.toFixed(3));
+    el.style.zIndex = String(Math.round(PET.y));
+    el.classList.toggle('walking', PET.mode === 'walk');
+    PET.raf = requestAnimationFrame(step);
+  };
+  PET.raf = requestAnimationFrame(step);
+}
+function randomLine() {
+  const rs = todayRoutines(); const all = rs.length && rs.every((r) => isChecked(r.id));
+  const pool = nightNow() ? PET_LINES.night : all ? PET_LINES.done : PET_LINES.day;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+let bubbleTm;
+function petSay(txt) {
+  const b = $('#petBubble'); if (!b) return;
+  b.textContent = txt; b.classList.add('show'); clearTimeout(bubbleTm); bubbleTm = setTimeout(() => b.classList.remove('show'), 2200);
+}
+function petHearts(n = 3, emoji = '💚') {
+  const sc = $('#gScene'); if (!sc) return;
+  for (let i = 0; i < n; i++) {
+    const h = document.createElement('span'); h.className = 'g-heart'; h.textContent = emoji;
+    h.style.left = `${PET.x + (Math.random() * 10 - 5)}%`; h.style.top = `${PET.y - 18}%`; h.style.animationDelay = `${i * 0.12}s`;
+    sc.appendChild(h); setTimeout(() => h.remove(), 1600);
+  }
+}
+function petPoke() {
+  const el = $('#pet'); if (!el) return;
+  if (nightNow()) { petSay('zzz… 5분만…'); return; }
+  el.classList.remove('hop'); void el.offsetWidth; el.classList.add('hop');
+  petHearts(3); petSay(randomLine());
+  PET.mode = 'idle'; PET.until = performance.now() + 1800;
+}
+function petWater() {
+  const drops = petDrops(); if (!drops) return toast('Finish a routine to earn 💧');
+  const before = petLevel(S.pet.xp);
+  S.pet.water ||= {}; S.pet.water[dkey()] = ((S.pet.water[dkey()]) || 0) + 1;
+  S.pet.xp = (S.pet.xp || 0) + 10;
+  const old = Date.now() - 14 * 864e5; for (const k of Object.keys(S.pet.water)) if (parseKey(k) < old) delete S.pet.water[k];
+  save(true);
+  const sc = $('#gScene');
+  if (sc) for (let i = 0; i < 6; i++) { const d = document.createElement('span'); d.className = 'g-drop'; d.textContent = '💧'; d.style.left = `${PET.x - 6 + Math.random() * 12}%`; d.style.top = `${PET.y - 34}%`; d.style.animationDelay = `${i * 0.08}s`; sc.appendChild(d); setTimeout(() => d.remove(), 1300); }
+  setTimeout(() => {
+    const lv = petLevel(S.pet.xp);
+    const keep = { x: PET.x, y: PET.y };
+    $('#garden').outerHTML = renderGarden(); Object.assign(PET, keep); startGarden();
+    petHearts(lv > before ? 6 : 3, lv > before ? '✨' : '💚');
+    petSay(lv > before ? `Lv ${lv}! 쑥쑥 🌱` : '고마워! 💧');
+    if (lv > before) toast(`${S.pet.name} grew to Lv ${lv}! 🌱`);
+  }, 650);
+}
+function petRename() {
+  openModal(`<h3>Name your sprout</h3><p class="desc">Your little friend in the garden 🌱</p>
+    <div class="field"><input class="input" id="petName" maxlength="14" value="${esc(S.pet.name)}" /></div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button><button class="btn btn-primary" id="petSave">Save</button></div>`);
+  const i = $('#petName'); setTimeout(() => { i.focus(); i.select(); }, 50);
+  const ok = () => { const v = i.value.trim(); if (!v) return; S.pet.name = v; save(true); closeModal(); render(); };
+  $('#petSave').onclick = ok; i.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) ok(); };
+}
+
 const secName = (id) => { const s = S.sections.find((x) => x.id === id); return s ? `${esc(s.icon)} ${esc(s.name)}` : ''; };
 function relTime(ts) {
   const diff = (Date.now() - ts) / 1000;
@@ -1695,6 +1822,8 @@ const actions = {
     if (!(await ask('Turn off sync here?', 'This device stops syncing. Your records stay on this device and in the cloud; enter the same phrase again any time to reconnect.', 'Turn off'))) return;
     SY = null; syncCK = null; saveSY(); render(); toast('Sync off on this device');
   },
+  'pet-water': () => petWater(),
+  'pet-rename': () => petRename(),
   'toggle-lock': () => pinModal(lockOn() ? 'off' : 'set'),
   'change-pin': () => pinModal('change'),
   'lock-after': (el) => { S.settings.lock.after = +el.dataset.v; save(); render(); },
@@ -1832,12 +1961,13 @@ async function seal(bytes) {
 async function unseal(buf) { const u = new Uint8Array(buf); return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, await sKey(), u.slice(12)); }
 
 /* change tracking: every item gets _u (last change), deletions leave tombstones in S._t, check toggles in S._ck */
-let seenItems = null, seenCk = null;
+let seenItems = null, seenCk = null, seenPet = null;
 const itemJSON = (it) => { const { _u, ...rest } = it; return JSON.stringify(rest); };
 const ckSet = () => { const s = new Set(); for (const [d, arr] of Object.entries(S.checks || {})) for (const r of arr) s.add(`${d}|${r}`); return s; };
 function snapshotSeen() {
   seenItems = new Map(); for (const c of SYNC_COLS) for (const it of S[c] || []) seenItems.set(it.id, itemJSON(it));
   seenCk = ckSet();
+  if (S.pet) { const { _u, ...pj } = S.pet; seenPet = JSON.stringify(pj); }
 }
 function initStamps() {
   S._t ||= {}; S._ck ||= {};
@@ -1859,6 +1989,7 @@ function stampChanges() {
   for (const k of ck) if (!seenCk.has(k)) { S._ck[k] = now; changed = true; }
   for (const k of seenCk) if (!ck.has(k)) { S._ck[k] = -now; changed = true; }
   seenCk = ck;
+  if (S.pet) { const { _u, ...pj } = S.pet; const js = JSON.stringify(pj); if (seenPet !== null && seenPet !== js) { S.pet._u = now; changed = true; } seenPet = js; }
   if (changed) { S._at = now; delete S._pristine; }
   return changed;
 }
@@ -1921,6 +2052,7 @@ function mergeState(L, R) {
   for (const src of [L.checks || {}, R.checks || {}]) for (const [d, arr] of Object.entries(src)) for (const r of arr) if (!(`${d}|${r}` in ck)) ck[`${d}|${r}`] = 1;
   const checks = {};
   for (const [k, t] of Object.entries(ck)) if (t > 0) { const [d, r] = k.split('|'); (checks[d] ||= []).push(r); }
+  if (R.pet && (!L.pet || (R.pet._u || 0) > (L.pet._u || 0))) out.pet = L.pet ? Object.assign(L.pet, R.pet) : R.pet;
   Object.assign(out, { checks, _ck: ck, _t: tomb, _at: Math.max(L._at || 0, R._at || 0), v: Math.max(L.v || 0, R.v || 0) });
   return out;
 }
@@ -1963,7 +2095,7 @@ function reattachOpenItem() {
   if (i < 0) arr.push(ctx.item); else if (arr[i] !== ctx.item) arr[i] = ctx.item;
   ctx.item._u = Date.now();
 }
-const syncPayload = () => { const p = { v: S.v, checks: S.checks, _t: S._t, _ck: S._ck, _at: S._at || 0 }; for (const c of SYNC_COLS) p[c] = S[c]; return p; };
+const syncPayload = () => { const p = { v: S.v, checks: S.checks, _t: S._t, _ck: S._ck, _at: S._at || 0, pet: S.pet }; for (const c of SYNC_COLS) p[c] = S[c]; return p; };
 const syncedJSON = (o) => JSON.stringify(SYNC_COLS.map((c) => o[c]).concat([o.checks]));
 
 let syncBusy = false, syncAgain = false, pushTimer = null;
