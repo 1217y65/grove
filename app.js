@@ -641,7 +641,7 @@ function memoGrid(ms, total) {
   return `<div class="memo-grid">${ms.map((m) => `
     <button class="card memo" data-act="open-memo" data-id="${m.id}">
       <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
-      <div class="m-body">${esc(plain(m.body))}</div>
+      <div class="m-body">${esc(plain(m.body)).trim()}</div>
       <div class="m-date">${relTime(m.updated)}</div>
     </button>`).join('')}</div>`;
 }
@@ -782,7 +782,7 @@ function posterCard(x) {
     <div class="pc-title">${esc(x.title || 'Untitled')}</div>
     ${sub ? `<div class="pc-sub">${esc(sub)}</div>` : ''}
     ${x.rating ? `<div class="pc-rate">★ ${x.rating}.0</div>` : ''}
-    ${x.note ? `<div class="pc-note">${esc(plain(x.note))}</div>` : ''}
+    ${x.note ? `<div class="pc-note">${esc(plain(x.note)).trim()}</div>` : ''}
   </button>`;
 }
 function quoteCard(x, wide) {
@@ -790,7 +790,7 @@ function quoteCard(x, wide) {
   return `<button class="card inspo quote${wide ? ' wide' : ''}" data-act="open-inspo" data-id="${x.id}">
     <div class="q-text">${esc(x.text || x.title)}</div>
     <div class="q-by">${x.who ? `— ${esc(x.who)}` : ''}${x.title && x.text ? `${x.who ? ', ' : '— '}${esc(x.title)}` : ''}</div>
-    ${x.note ? `<div class="q-note">${esc(plain(x.note))}</div>` : ''}
+    ${x.note ? `<div class="q-note">${esc(plain(x.note)).trim()}</div>` : ''}
     ${x.kind !== 'quote' ? `<div class="i-kind">${k.icon} ${k.label}</div>` : ''}
   </button>`;
 }
@@ -828,14 +828,14 @@ function verseCard(v, wide) {
   return `<button class="card inspo quote verse${wide ? ' wide' : ''}" data-act="open-faith" data-id="${v.id}">
     <div class="q-text">${esc(v.text || v.ref)}</div>
     ${v.ref ? `<div class="q-by">${esc(v.ref)}</div>` : ''}
-    ${v.note ? `<div class="q-note">${esc(plain(v.note))}</div>` : ''}
+    ${v.note ? `<div class="q-note">${esc(plain(v.note)).trim()}</div>` : ''}
   </button>`;
 }
 function qtCard(q) {
   return `<button class="card qt-card" data-act="open-faith" data-id="${q.id}">
     <div class="qt-top"><span class="qt-date">${fShortDate(q.date)}</span>${q.passage ? `<span class="qt-passage">${esc(q.passage)}</span>` : ''}</div>
     ${q.title ? `<div class="qt-title">${esc(q.title)}</div>` : ''}
-    ${q.note ? `<div class="qt-body">${esc(plain(q.note))}</div>` : ''}
+    ${q.note ? `<div class="qt-body">${esc(plain(q.note)).trim()}</div>` : ''}
     ${q.apply ? `<div class="qt-apply">✔︎ ${esc(q.apply)}</div>` : ''}
   </button>`;
 }
@@ -1516,6 +1516,7 @@ function cleanHTML(html) {
         tag = /font-weight:\s*(bold|[6-9]00)/i.test(st) ? 'B' : /font-style:\s*italic/i.test(st) ? 'I' : /background/i.test(st) ? 'MARK' : '';
       }
       if (!RICH_TAGS.has(tag)) { c.replaceWith(...c.childNodes); continue; }
+      if ((tag === 'MARK' || tag === 'B' || tag === 'I') && !c.textContent.replace(/[\u200b\s]/g, '')) { c.replaceWith(...c.childNodes); continue; }
       if (tag !== c.tagName) { const n = document.createElement(tag); n.append(...c.childNodes); c.replaceWith(n); continue; }
       for (const a of [...c.attributes]) c.removeAttribute(a.name);
     }
@@ -1545,7 +1546,7 @@ function plain(v) {
   if (!isHTML(v)) return v || '';
   const t = document.createElement('template');
   t.innerHTML = cleanHTML(v).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n');
-  return t.content.textContent.replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+  return t.content.textContent.replace(/\u200b/g, '').replace(/^[\s]+/, '').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
 }
 function richValue(el) { const h = cleanHTML(el.innerHTML); return plain(h).trim() ? h : ''; }
 function richEditor(id, value, cls, ph) {
@@ -1554,7 +1555,10 @@ function richEditor(id, value, cls, ph) {
 /* hook an editor to a field: saves cleaned HTML on every change */
 function bindRich(el, onChange) {
   if (!el) return;
-  const sync = () => { el.classList.toggle('is-empty', !plain(el.innerHTML).trim()); onChange(richValue(el)); };
+  const sync = () => {
+    el.querySelectorAll('mark').forEach((m) => { if (!m.textContent.replace(/[\u200b\s]/g, '')) m.replaceWith(...m.childNodes); });
+    el.classList.toggle('is-empty', !plain(el.innerHTML).trim()); onChange(richValue(el));
+  };
   el.addEventListener('input', sync);
   el.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
   const ensureBlock = () => {
