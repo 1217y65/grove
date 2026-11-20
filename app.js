@@ -227,7 +227,7 @@ function parseHash() {
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#new-memo') return quickNewMemo();
-  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; view.wlang = prev.wlang; view.wsort = prev.wsort; view.whide = prev.whide; view.wstar = prev.wstar; }
+  const prev = view; view = parseHash(); if (prev.name === 'section' && view.name === 'section' && prev.id === view.id) { view.kind = prev.kind; view.ftab = prev.ftab; view.mtab = prev.mtab; view.wlang = prev.wlang; view.wsort = prev.wsort; view.whide = prev.whide; view.wstar = prev.wstar; }
   if (view.name !== 'section' || !navOpen.has(view.id)) navOpen.clear();
   if (view.name === 'section' && view.group) navOpen.add(view.id);
   if (keepDrawer) keepDrawer = false; else closeDrawer();
@@ -355,7 +355,7 @@ function renderToday() {
       <div>
         <div class="section-title">📝 Memos</div>
         ${recent.length ? `<div class="list">${recent.map((m) => `
-          <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
+          <button class="card memo" style="min-height:0" data-act="${m.kind === 'scribble' ? 'open-scribble' : 'open-memo'}" data-id="${m.id}">
             <div class="m-title">${m.pinned ? `<span class="pin">${svgPin(true)}</span>` : ''}<span>${esc(m.title || 'Untitled')}</span></div>
             ${m.body ? `<div class="m-body" style="-webkit-line-clamp:2">${esc(m.body)}</div>` : ''}
             <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
@@ -441,17 +441,50 @@ function renderRoutineSection(sec) {
 }
 
 /* ── Memo ── */
+const isScribble = (m) => m.kind === 'scribble';
+function scribbleCard(m) {
+  return `<button class="scribble" data-act="open-scribble" data-id="${m.id}"><span class="sc-text">${esc(m.title)}</span><span class="sc-time">${relTime(m.updated)}</span></button>`;
+}
 function renderMemoSection(sec) {
+  const tab = ['all', 'notes', 'scribbles'].includes(view.mtab) ? view.mtab : 'all';
   const q = (view.mq || '').trim().toLowerCase();
-  let ms = S.memos.filter((m) => m.sectionId === sec.id);
-  const total = ms.length;
-  if (q) ms = ms.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(q));
-  ms.sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
+  const mine = S.memos.filter((m) => m.sectionId === sec.id);
+  const notesAll = mine.filter((m) => !isScribble(m));
+  const scribs = mine.filter(isScribble).sort((a, b) => b.created - a.created);
+  let notes = q ? notesAll.filter((m) => (m.title + ' ' + m.body).toLowerCase().includes(q)) : notesAll;
+  notes = [...notes].sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
+  const jot = `<form class="card jot" data-form="quick-scribble" data-sec="${sec.id}"><span>✏️</span><input name="t" placeholder="Jot something down…" autocomplete="off" /><button class="btn btn-primary btn-sm" type="submit">Add</button></form>`;
+  const scribGrid = (list) => list.length ? `<div class="scribble-grid">${list.map(scribbleCard).join('')}</div>` : '<div class="empty" style="padding:22px">Short thoughts you jot down land here</div>';
+  let body = '';
+  if (tab === 'scribbles') body = jot + scribGrid(scribs);
+  else if (tab === 'notes') body = `${notesAll.length > 3 ? `<div class="toolbar-row"><label class="search-box">🔍<input id="memoFilter" placeholder="Search notes" value="${esc(view.mq || '')}" /></label></div>` : ''}<div id="memoList">${memoGrid(notes, notesAll.length)}</div>`;
+  else body = `${jot}
+      ${scribs.length ? `<div class="section-title">✏️ Scribbles <span class="count">${scribs.length}</span>${scribs.length > 6 ? '<button class="link" data-act="memo-tab" data-k="scribbles">See all</button>' : ''}</div>${scribGrid(scribs.slice(0, 6))}` : ''}
+      <div class="section-title">📝 Notes <span class="count">${notesAll.length}</span></div><div id="memoList">${memoGrid(notes, notesAll.length)}</div>`;
   return `
-    ${sectionHead(sec, `${total} memo${total === 1 ? '' : 's'}`)}
-    ${total > 3 ? `<div class="toolbar-row"><label class="search-box">🔍<input id="memoFilter" placeholder="Search this section" value="${esc(view.mq || '')}" /></label></div>` : ''}
-    <div id="memoList">${memoGrid(ms, total)}</div>
-    <button class="fab" data-act="new-memo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>New memo</button>`;
+    ${sectionHead(sec, `${notesAll.length} note${notesAll.length === 1 ? '' : 's'} · ${scribs.length} scribble${scribs.length === 1 ? '' : 's'}`)}
+    <div class="tabs">
+      <button class="tab${tab === 'all' ? ' on' : ''}" data-act="memo-tab" data-k="all">All <span>${mine.length}</span></button>
+      <button class="tab${tab === 'notes' ? ' on' : ''}" data-act="memo-tab" data-k="notes">📝 Notes <span>${notesAll.length}</span></button>
+      <button class="tab${tab === 'scribbles' ? ' on' : ''}" data-act="memo-tab" data-k="scribbles">✏️ Scribbles <span>${scribs.length}</span></button>
+    </div>
+    ${body}
+    ${tab === 'scribbles' ? '' : `<button class="fab" data-act="new-memo" data-sec="${sec.id}"><span style="font-size:22px;line-height:1">＋</span>New note</button>`}`;
+}
+function scribbleModal(id) {
+  const m = S.memos.find((x) => x.id === id); if (!m) return;
+  openModal(`
+    <h3>✏️ Scribble</h3>
+    <textarea class="textarea scribble-in" id="scText" rows="4">${esc(m.title)}</textarea>
+    <div class="modal-actions">
+      <button class="btn btn-danger left" id="scDel">Delete</button>
+      <button class="btn btn-ghost" id="scNote">Make it a note</button>
+      <button class="btn btn-primary" id="scSave">Save</button>
+    </div>`);
+  const ta = $('#scText'); setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 50);
+  $('#scSave').onclick = () => { const v = ta.value.trim(); if (!v) return; m.title = v; m.updated = Date.now(); save(); closeModal(); render(); toast('Saved ✓'); };
+  $('#scDel').onclick = () => { S.memos = S.memos.filter((x) => x.id !== m.id); save(); closeModal(); render(); toast('Deleted'); };
+  $('#scNote').onclick = () => { const v = ta.value.trim(); if (v) m.title = v; delete m.kind; m.updated = Date.now(); save(); closeModal(); view.mtab = 'notes'; render(); openMemo(m.id); };
 }
 function memoGrid(ms, total) {
   if (!ms.length) return `<div class="empty"><div class="e-icon">💭</div>${total ? 'No matching memos' : 'Write your first memo'}</div>`;
@@ -708,7 +741,7 @@ function openFaith(id, draft) {
   if (!x) return;
   const isNew = !!draft;
   const k = FKINDS[x.kind];
-  const upd = () => { x.updated = Date.now(); if (!isNew) save(true); };
+  const upd = () => { x.updated = Date.now(); if (!sheetCtx?.isNew) save(true); };
   const grow = (el, min = 0.38) => growKeep(el, min);
   let form = '';
   if (x.kind === 'qt') {
@@ -750,7 +783,7 @@ function openFaith(id, draft) {
     <div class="sheet-body"><div class="sheet-inner">${form}</div></div>`, {
     type: 'faith', id: x.id, isNew, item: x,
     onClose() {
-      if (isNew) { if (faithHas(x) && !this.discard) S.faith.push(x); }
+      if (this.isNew) { if (faithHas(x) && !this.discard) S.faith.push(x); }
       else if (!faithHas(x)) S.faith = S.faith.filter((i) => i.id !== x.id);
       save(true);
     },
@@ -834,7 +867,7 @@ function openWord(id, draft) {
   if (!w) return;
   const isNew = !!draft;
   const L = WLANG[w.lang] || WLANG.ko;
-  const upd = () => { w.updated = Date.now(); if (!isNew) save(true); };
+  const upd = () => { w.updated = Date.now(); if (!sheetCtx?.isNew) save(true); };
   openSheet(`
     <div class="sheet-bar">
       <button class="icon-btn" data-act="word-cancel" aria-label="${isNew ? 'Cancel' : 'Back'}">${isNew ? svgClose : svgBack}</button>
@@ -854,7 +887,7 @@ function openWord(id, draft) {
     </div></div>`, {
     type: 'word', id: w.id, isNew, item: w,
     onClose() {
-      if (isNew) { if (w.word.trim() && !this.discard) S.words.push(w); }
+      if (this.isNew) { if (w.word.trim() && !this.discard) S.words.push(w); }
       else if (!w.word.trim() && !wordHas(w)) S.words = S.words.filter((x) => x.id !== w.id);
       save(true);
     },
@@ -895,7 +928,7 @@ function searchResults(q) {
   if (!ms.length && !ps.length && !rs.length && !xs.length && !fs.length && !wds.length) return `<div class="empty" style="margin-top:18px">No results for "${esc(q)}"</div>`;
   return `
     ${ms.length ? `<div class="section-title">📝 Memos <span class="count">${ms.length}</span></div><div class="list">${ms.map((m) => `
-      <button class="card memo" style="min-height:0" data-act="open-memo" data-id="${m.id}">
+      <button class="card memo" style="min-height:0" data-act="${m.kind === 'scribble' ? 'open-scribble' : 'open-memo'}" data-id="${m.id}">
         <div class="m-title"><span>${hl(m.title || 'Untitled', q)}</span></div>
         <div class="m-body" style="-webkit-line-clamp:2">${hl(snippet(m.body, q), q)}</div>
         <div class="m-date">${secName(m.sectionId)} · ${relTime(m.updated)}</div>
@@ -999,6 +1032,7 @@ function openSheet(html, ctx) {
   const sh = $('#sheet');
   sh.innerHTML = html;
   sh.classList.add('open'); sh.setAttribute('aria-hidden', 'false');
+  sh.classList.toggle('draft', !!ctx?.isNew); sh.classList.remove('editing');
   document.body.style.overflow = 'hidden';
   history.pushState({ sheet: 1 }, '');
 }
@@ -1058,7 +1092,7 @@ function openMemo(id, draft) {
     onClose() {
       // back gestures / Escape keep what was written; only the ✕ button discards a new memo
       const has = m.title.trim() || m.body.trim();
-      if (isNew) { if (has && !this.discard) S.memos.push(m); }
+      if (this.isNew) { if (has && !this.discard) S.memos.push(m); }
       else if (!has) S.memos = S.memos.filter((x) => x.id !== m.id);
       save(true);
     },
@@ -1068,7 +1102,7 @@ function openMemo(id, draft) {
   let tm;
   const upd = () => {
     m.title = t.value; m.body = b.value; m.updated = Date.now();
-    if (!isNew) { clearTimeout(tm); tm = setTimeout(() => save(true), 350); }
+    if (!sheetCtx?.isNew) { clearTimeout(tm); tm = setTimeout(() => save(true), 350); }
   };
   t.addEventListener('input', upd);
   b.addEventListener('input', () => { autoGrow(b); upd(); });
@@ -1133,6 +1167,7 @@ function openPlan(id) {
       <button class="icon-btn" data-act="close-sheet" aria-label="Close">${svgBack}</button>
       <div class="crumb">${secName(p.sectionId)}</div>
       <button class="icon-btn" data-act="del-plan" aria-label="Delete">${svgTrash}</button>
+      <button class="done-btn" data-act="sheet-done" aria-label="Done">${svgCheck}</button>
     </div>
     <div class="sheet-body"><div class="sheet-inner">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
@@ -1258,7 +1293,7 @@ function openInspo(id, draft) {
     type: 'inspo', id: x.id, isNew, item: x,
     onClose() {
       // back gestures / Escape keep what was written; only the ✕ button discards a new draft
-      if (isNew) { if (inspoHas(x) && !this.discard) S.inspos.push(x); else if (x.img) imgDel(x.img); }
+      if (this.isNew) { if (inspoHas(x) && !this.discard) S.inspos.push(x); else if (x.img) imgDel(x.img); }
       else if (!inspoHas(x)) S.inspos = S.inspos.filter((i) => i.id !== x.id);
       save(true);
     },
@@ -1521,10 +1556,10 @@ const actions = {
   'modal-no': () => closeModal(false),
 
   'new-memo': (el) => openMemo(null, newMemo(el.dataset.sec, '', true)),
-  'memo-done': () => {
-    const { item, isNew } = sheetCtx; const has = item.title.trim() || item.body.trim();
-    closeSheet(); if (has) toast(isNew ? 'Memo saved ✓' : 'Saved ✓');
-  },
+  'memo-done': () => sheetDone(),
+  'memo-tab': (el) => { view.mtab = el.dataset.k; render(); },
+  'open-scribble': (el) => scribbleModal(el.dataset.id),
+  'sheet-done': () => sheetDone(),
   'memo-cancel': async () => {
     const ctx = sheetCtx;
     if (ctx.isNew && (ctx.item.title.trim() || ctx.item.body.trim())) {
@@ -1557,12 +1592,7 @@ const actions = {
       <div class="modal-actions"><button class="btn btn-ghost" data-act="modal-no">Cancel</button></div>`);
     $('.kind-pick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; closeModal(); start(b.dataset.k); });
   },
-  'inspo-done': () => {
-    const { item, isNew } = sheetCtx;
-    const has = inspoHas(item);
-    closeSheet();
-    if (has) toast(isNew ? `Added to ${(KINDS[item.kind] || KINDS.other).label} ✓` : 'Saved ✓');
-  },
+  'inspo-done': () => sheetDone(),
   'inspo-cancel': async () => {
     const ctx = sheetCtx;
     if (ctx.isNew && inspoHas(ctx.item)) {
@@ -1579,7 +1609,7 @@ const actions = {
   'word-reveal': (el) => { el.closest('.w-tile').classList.toggle('revealed'); },
   'word-star': (el) => { const w = S.words.find((x) => x.id === el.dataset.id); w.star = !w.star; save(); render(); },
   'open-word': (el) => openWord(el.dataset.id),
-  'word-done': () => { const { item, isNew } = sheetCtx; const ok = item.word.trim(); closeSheet(); if (ok) toast(isNew ? 'Word added 📒' : 'Saved ✓'); },
+  'word-done': () => sheetDone(),
   'word-cancel': async () => {
     const ctx = sheetCtx;
     if (ctx.isNew && wordHas(ctx.item)) { if (!(await ask('Discard this word?', 'What you wrote won\'t be saved.', 'Discard', true))) return; ctx.discard = true; }
@@ -1600,10 +1630,7 @@ const actions = {
     const p = S.faith.find((x) => x.id === el.dataset.id); p.answered = !p.answered; p.answeredAt = p.answered ? Date.now() : 0;
     save(); if (p.answered) toast('Answered prayer 🙌'); render();
   },
-  'faith-done': () => {
-    const { item, isNew } = sheetCtx; const has = faithHas(item);
-    closeSheet(); if (has) toast(isNew ? 'Saved 🙏' : 'Saved ✓');
-  },
+  'faith-done': () => sheetDone(),
   'faith-cancel': async () => {
     const ctx = sheetCtx;
     if (ctx.isNew && faithHas(ctx.item)) {
@@ -1713,9 +1740,14 @@ document.addEventListener('submit', (e) => {
     const v = f.q.value.trim(); if (!v) return;
     let sec = S.sections.find((s) => s.type === 'memo');
     if (!sec) { sec = { id: uid(), name: 'Memo', icon: '📝', type: 'memo', created: Date.now() }; S.sections.push(sec); }
-    const [first, ...rest] = v.split('\n');
-    const m = newMemo(sec.id); m.title = first.slice(0, 60); m.body = rest.join('\n'); save();
-    f.q.value = ''; toast(`Saved to ${sec.icon} ${sec.name}`); render();
+    S.memos.push({ id: uid(), sectionId: sec.id, kind: 'scribble', title: v, body: '', pinned: false, created: Date.now(), updated: Date.now() }); save();
+    f.q.value = ''; toast('Jotted in ✏️ Scribbles'); render();
+  }
+  if (f.dataset.form === 'quick-scribble') {
+    const v = f.t.value.trim(); if (!v) return;
+    S.memos.push({ id: uid(), sectionId: f.dataset.sec, kind: 'scribble', title: v, body: '', pinned: false, created: Date.now(), updated: Date.now() });
+    save(); render(); setTimeout(() => $('[data-form="quick-scribble"] input')?.focus(), 0);
+    return;
   }
   if (f.dataset.form === 'quick-word') {
     const word = f.word.value.trim(), meaning = f.meaning.value.trim();
@@ -1740,7 +1772,7 @@ document.addEventListener('input', (e) => {
   if (e.target.id === 'memoFilter') {
     view.mq = e.target.value;
     const sec = S.sections.find((s) => s.id === view.id);
-    const all = S.memos.filter((m) => m.sectionId === sec.id);
+    const all = S.memos.filter((m) => m.sectionId === sec.id && m.kind !== 'scribble');
     const q = view.mq.trim().toLowerCase();
     const ms = all.filter((m) => !q || (m.title + ' ' + m.body).toLowerCase().includes(q)).sort((a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
     $('#memoList').innerHTML = memoGrid(ms, all.length);
@@ -1892,6 +1924,37 @@ function mergeState(L, R) {
   Object.assign(out, { checks, _ck: ck, _t: tomb, _at: Math.max(L._at || 0, R._at || 0), v: Math.max(L.v || 0, R.v || 0) });
   return out;
 }
+/* ✓ works like "Done" in iPhone Notes: save + put the keyboard away, stay on the page; ‹ leaves */
+const SHEET_META = {
+  memo: { col: 'memos', has: (m) => (m.title || '').trim() || (m.body || '').trim(), del: 'del-memo' },
+  inspo: { col: 'inspos', has: (x) => inspoHas(x), del: 'del-inspo' },
+  faith: { col: 'faith', has: (x) => faithHas(x), del: 'del-faith' },
+  word: { col: 'words', has: (w) => (w.word || '').trim(), del: 'del-word' },
+  plan: { col: 'plans', has: () => true, del: 'del-plan' },
+};
+function setEditing(on) { $('#sheet').classList.toggle('editing', !!on); }
+function sheetDone() {
+  const ctx = sheetCtx; if (!ctx) return;
+  const meta = SHEET_META[ctx.type]; const item = ctx.item;
+  if (document.activeElement && $('#sheet').contains(document.activeElement)) document.activeElement.blur();
+  if (ctx.isNew) {
+    if (!meta?.has(item)) { toast('Write something first'); return; }
+    S[meta.col].push(item); ctx.isNew = false;
+    const sh = $('#sheet'); sh.classList.remove('draft');
+    const bar = $('.sheet-bar', sh); const back = $('.icon-btn', bar);
+    back.innerHTML = svgBack; back.setAttribute('aria-label', 'Back');
+    const crumb = $('.crumb', bar); crumb.textContent = crumb.textContent.replace(/New (\S)/, (_, c) => c.toUpperCase());
+    if (meta.del && !$(`[data-act="${meta.del}"]`, bar)) {
+      const del = document.createElement('button'); del.className = 'icon-btn'; del.dataset.act = meta.del; del.setAttribute('aria-label', 'Delete'); del.innerHTML = svgTrash;
+      bar.insertBefore(del, $('.done-btn', bar));
+    }
+  }
+  if (item) item.updated = Date.now();
+  save(true); setEditing(false); toast('Saved ✓');
+}
+document.addEventListener('focusin', (e) => { if (e.target.closest?.('#sheet') && /^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) setEditing(true); });
+document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!a || !$('#sheet').contains(a) || !/^(TEXTAREA|INPUT|SELECT)$/.test(a.tagName)) setEditing(false); }, 250));
+document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('.done-btn')) e.preventDefault(); }); // keep focus until the tap lands
 const SHEET_COL = { memo: 'memos', plan: 'plans', inspo: 'inspos', faith: 'faith', word: 'words' };
 function reattachOpenItem() {
   const ctx = sheetCtx; const col = ctx && SHEET_COL[ctx.type];

@@ -1,5 +1,5 @@
 /* Grove — Service Worker */
-const VERSION = 'grove-v2.3.2';
+const VERSION = 'grove-v2.4.0';
 const SHELL = [
   './',
   './index.html',
