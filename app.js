@@ -1617,7 +1617,6 @@ function renderPhotoCal() {
   const [y, m] = ym.split('-').map(Number);
   const lead = new Date(y, m - 1, 1).getDay(); const nDays = new Date(y, m, 0).getDate();
   const map = {}; for (const d of S.days || []) if (d.date.startsWith(ym)) map[d.date] = d;
-  const shots = Object.values(map).filter((d) => d.img).length;
   const today = dkey();
   let cells = '';
   for (let i = 0; i < lead; i++) cells += '<span class="cal-blank"></span>';
@@ -1630,11 +1629,10 @@ function renderPhotoCal() {
     <div class="photo-cal card">
       <div class="cal-head">
         <button class="icon-btn" data-act="cal-move" data-d="-1" aria-label="Previous month">‹</button>
-        <div class="cal-title"><b>${MONL[m - 1]}</b><small>${y}${shots ? ` · ${shots} photo day${shots === 1 ? '' : 's'}` : ' · tap a day to add a photo'}</small></div>
+        <div class="cal-title"><b>${MONL[m - 1]}</b><small>${y}</small></div>
         <button class="icon-btn" data-act="cal-move" data-d="1" aria-label="Next month">›</button>
       </div>
       <div class="cal-grid">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((w) => `<span class="cal-wd">${w}</span>`).join('')}${cells}</div>
-      <div class="cal-foot">stay curious, stay cozy</div>
     </div>`;
 }
 function pickPhoto(cb) {
